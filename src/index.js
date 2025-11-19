@@ -84,12 +84,9 @@ async function run() {
       throw new Error(`Failed to parse matrix JSON: ${error.message}\nOutput: ${stdout}`);
     }
 
-    // Validate the matrix is valid JSON
+    // Set output as JSON string for GitHub Actions to parse
     const matrixJson = JSON.stringify(matrixObject);
-
-    // Set outputs as objects (no double-encoding in JavaScript actions!)
-    core.setOutput('matrix', matrixObject);
-    core.setOutput('matrix-json', matrixJson);
+    core.setOutput('matrix', matrixJson);
 
     core.info('✅ Generated deployment matrix:');
     core.info(JSON.stringify(matrixObject, null, 2));

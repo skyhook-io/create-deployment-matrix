@@ -27,11 +27,7 @@ inputs:
 
 outputs:
   matrix:
-    description: 'A JSON matrix for service deployments containing service and environment combinations'
-    value: ${{ steps.create-matrix.outputs.matrix }}
-  matrix-json:
-    description: 'Raw JSON string of the matrix'
-    value: ${{ steps.create-matrix.outputs.matrix-json }}
+    description: 'JSON string of the deployment matrix for service deployments'
 
 runs:
   using: 'node20'
