@@ -1,7 +1,7 @@
 name: 'Create Deployment Matrix'
 description: 'Creates a matrix for service deployment based on .koala-monorepo.json and .koala.toml configuration'
 author: 'Skyhook'
-
+ 
 branding:
   icon: 'grid'
   color: 'purple'
