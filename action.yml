@@ -96,8 +96,19 @@ runs:
           exit 1
         fi
 
-        echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
-        echo "matrix-json=${MATRIX}" >> $GITHUB_OUTPUT
+        # Use EOF delimiter to prevent interpretation of special characters
+        # This ensures the JSON is not double-encoded
+        {
+          echo "matrix<<EOF"
+          echo "${MATRIX}"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+        {
+          echo "matrix-json<<EOF"
+          echo "${MATRIX}"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
         echo "✅ Generated deployment matrix:"
         echo "${MATRIX}" | jq .
