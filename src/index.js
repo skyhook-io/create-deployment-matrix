@@ -91,31 +91,8 @@ async function run() {
     core.info('✅ Generated deployment matrix:');
     core.info(JSON.stringify(matrixObject, null, 2));
 
-    // Generate summary
-    await core.summary
-      .addHeading('📊 Deployment Matrix Summary', 2)
-      .addRaw('\n')
-      .addRaw('✅ **Status:** Successfully generated deployment matrix\n\n')
-      .addHeading('🎯 Configuration', 3)
-      .addRaw(`- **Tag:** \`${tag}\`\n`)
-      .addRaw(`- **Branch:** \`${branch}\`\n`)
-      .addRaw(overlay ? `- **Environment:** \`${overlay}\`\n` : '- **Environment:** All environments\n')
-      .addRaw('\n')
-      .addHeading('📋 Matrix Output', 3)
-      .addCodeBlock(JSON.stringify(matrixObject, null, 2), 'json')
-      .write();
-
   } catch (error) {
     core.setFailed(error.message);
-
-    // Generate error summary
-    await core.summary
-      .addHeading('📊 Deployment Matrix Summary', 2)
-      .addRaw('\n')
-      .addRaw('❌ **Status:** Failed to generate matrix\n\n')
-      .addRaw(`Check the logs above for error details.\n\n`)
-      .addRaw(`**Error:** ${error.message}`)
-      .write();
   }
 }
 
