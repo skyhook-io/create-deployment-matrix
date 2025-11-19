@@ -82,11 +82,23 @@ runs:
         fi
 
         echo "📦 Executing: ${CMD}"
-        MATRIX=$(eval "${CMD}")
+        MATRIX_RAW=$(eval "${CMD}")
 
-        if [[ -z "${MATRIX}" ]]; then
+        if [[ -z "${MATRIX_RAW}" ]]; then
           echo "::error::Failed to generate matrix - empty result"
           exit 1
+        fi
+
+        echo "Raw output from workflow-utils:"
+        echo "${MATRIX_RAW}"
+
+        # Check if the output is a JSON string (double-encoded) and decode if needed
+        # workflow-utils might return JSON.stringify(matrix) instead of just matrix
+        if echo "${MATRIX_RAW}" | jq -e 'type == "string"' > /dev/null 2>&1; then
+          echo "Detected double-encoded JSON, decoding..."
+          MATRIX=$(echo "${MATRIX_RAW}" | jq -r '.')
+        else
+          MATRIX="${MATRIX_RAW}"
         fi
 
         # Validate it's valid JSON
@@ -97,7 +109,6 @@ runs:
         fi
 
         # Use EOF delimiter to prevent interpretation of special characters
-        # This ensures the JSON is not double-encoded
         {
           echo "matrix<<EOF"
           echo "${MATRIX}"
