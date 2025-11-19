@@ -1,0 +1,254 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-basic-matrix:
+    runs-on: ubuntu-latest
+    name: Test basic matrix generation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test monorepo structure
+        run: |
+          # Create .koala-monorepo.json
+          cat > .koala-monorepo.json << 'EOF'
+          {
+            "services": [
+              {
+                "name": "test-service-1",
+                "path": "services/service1"
+              },
+              {
+                "name": "test-service-2",
+                "path": "services/service2"
+              }
+            ]
+          }
+          EOF
+
+          # Create service directories and .koala.toml files
+          mkdir -p services/service1 services/service2
+
+          cat > services/service1/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev", "production"]
+
+          [deployment.dev]
+          replicas = 1
+
+          [deployment.production]
+          replicas = 3
+          EOF
+
+          cat > services/service2/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev", "staging", "production"]
+
+          [deployment.dev]
+          replicas = 1
+
+          [deployment.staging]
+          replicas = 2
+
+          [deployment.production]
+          replicas = 5
+          EOF
+
+          echo "Test structure created"
+
+      - name: Test matrix generation (all environments)
+        id: matrix-all
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify matrix output
+        run: |
+          echo "Matrix output: ${{ steps.matrix-all.outputs.matrix-json }}"
+
+          # Verify it's valid JSON
+          echo '${{ steps.matrix-all.outputs.matrix-json }}' | jq empty
+
+          # Check that we have entries
+          ENTRY_COUNT=$(echo '${{ steps.matrix-all.outputs.matrix-json }}' | jq '.include | length')
+          if [[ $ENTRY_COUNT -lt 1 ]]; then
+            echo "Expected at least 1 matrix entry, got $ENTRY_COUNT"
+            exit 1
+          fi
+
+          echo "✅ Matrix generated with $ENTRY_COUNT entries"
+
+  test-environment-filter:
+    runs-on: ubuntu-latest
+    name: Test environment filtering
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test monorepo structure
+        run: |
+          cat > .koala-monorepo.json << 'EOF'
+          {
+            "services": [
+              {
+                "name": "api-service",
+                "path": "services/api"
+              }
+            ]
+          }
+          EOF
+
+          mkdir -p services/api
+
+          cat > services/api/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev", "staging", "production"]
+
+          [deployment.dev]
+          replicas = 1
+
+          [deployment.staging]
+          replicas = 2
+
+          [deployment.production]
+          replicas = 5
+          EOF
+
+      - name: Test production filter
+        id: matrix-prod
+        uses: ./
+        with:
+          overlay: production
+          tag: v2.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify production matrix
+        run: |
+          echo "Matrix: ${{ steps.matrix-prod.outputs.matrix-json }}"
+          echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq .
+
+          # Verify all entries are for production
+          PROD_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq '[.include[] | select(.environment == "production")] | length')
+          TOTAL_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq '.include | length')
+
+          if [[ $PROD_COUNT -ne $TOTAL_COUNT ]]; then
+            echo "Expected all entries to be production, got $PROD_COUNT out of $TOTAL_COUNT"
+            exit 1
+          fi
+
+          echo "✅ Environment filter working correctly"
+
+  test-custom-path:
+    runs-on: ubuntu-latest
+    name: Test with custom repository path
+    steps:
+      - name: Checkout to custom path
+        uses: actions/checkout@v4
+        with:
+          path: custom-repo
+
+      - name: Create test structure in custom path
+        run: |
+          cd custom-repo
+
+          cat > .koala-monorepo.json << 'EOF'
+          {
+            "services": [
+              {
+                "name": "custom-service",
+                "path": "services/custom"
+              }
+            ]
+          }
+          EOF
+
+          mkdir -p services/custom
+
+          cat > services/custom/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev"]
+
+          [deployment.dev]
+          replicas = 1
+          EOF
+
+      - name: Test with custom path
+        id: matrix
+        uses: ./
+        with:
+          repo-path: custom-repo
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify custom path matrix
+        run: |
+          echo "Matrix: ${{ steps.matrix.outputs.matrix-json }}"
+          echo '${{ steps.matrix.outputs.matrix-json }}' | jq .
+
+          # Verify we got results
+          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix-json }}' | jq '.include | length')
+          if [[ $ENTRY_COUNT -lt 1 ]]; then
+            echo "Expected at least 1 entry for custom path"
+            exit 1
+          fi
+
+          echo "✅ Custom path working correctly"
+
+  test-tag-injection:
+    runs-on: ubuntu-latest
+    name: Test tag is properly injected
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test structure
+        run: |
+          cat > .koala-monorepo.json << 'EOF'
+          {
+            "services": [
+              {
+                "name": "tag-test-service",
+                "path": "services/test"
+              }
+            ]
+          }
+          EOF
+
+          mkdir -p services/test
+
+          cat > services/test/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev"]
+
+          [deployment.dev]
+          replicas = 1
+          EOF
+
+      - name: Generate matrix with specific tag
+        id: matrix
+        uses: ./
+        with:
+          tag: v3.5.7
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify tag in matrix
+        run: |
+          echo '${{ steps.matrix.outputs.matrix-json }}' | jq .
+
+          # Check that tag is in the matrix
+          TAG_VALUE=$(echo '${{ steps.matrix.outputs.matrix-json }}' | jq -r '.include[0].tag')
+
+          if [[ "$TAG_VALUE" != "v3.5.7" ]]; then
+            echo "Expected tag v3.5.7, got $TAG_VALUE"
+            exit 1
+          fi
+
+          echo "✅ Tag properly injected into matrix"
