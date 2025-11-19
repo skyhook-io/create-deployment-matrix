@@ -1,7 +1,7 @@
 name: 'Create Deployment Matrix'
 description: 'Creates a matrix for service deployment based on .koala-monorepo.json and .koala.toml configuration'
 author: 'Skyhook'
-
+ 
 branding:
   icon: 'grid'
   color: 'purple'
@@ -28,7 +28,7 @@ inputs:
 outputs:
   matrix:
     description: 'A JSON matrix for service deployments containing service and environment combinations'
-    value: ${{ steps.create-matrix.outputs.matrix }}
+    value: ${{ fromJSON(steps.create-matrix.outputs.matrix) }}
   matrix-json:
     description: 'Raw JSON string of the matrix'
     value: ${{ steps.create-matrix.outputs.matrix-json }}
@@ -92,8 +92,6 @@ runs:
         echo "Raw output from workflow-utils:"
         echo "${MATRIX_RAW}"
 
-        # Check if the output is a JSON string (double-encoded) and decode if needed
-        # workflow-utils might return JSON.stringify(matrix) instead of just matrix
         if echo "${MATRIX_RAW}" | jq -e 'type == "string"' > /dev/null 2>&1; then
           echo "Detected double-encoded JSON, decoding..."
           MATRIX=$(echo "${MATRIX_RAW}" | jq -r '.')
@@ -101,14 +99,12 @@ runs:
           MATRIX="${MATRIX_RAW}"
         fi
 
-        # Validate it's valid JSON
         if ! echo "${MATRIX}" | jq empty 2>/dev/null; then
           echo "::error::Generated matrix is not valid JSON"
           echo "Matrix content: ${MATRIX}"
           exit 1
         fi
 
-        # Use EOF delimiter to prevent interpretation of special characters
         {
           echo "matrix<<EOF"
           echo "${MATRIX}"
