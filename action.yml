@@ -28,7 +28,7 @@ inputs:
 outputs:
   matrix:
     description: 'A JSON matrix for service deployments containing service and environment combinations'
-    value: ${{ fromJSON(steps.create-matrix.outputs.matrix) }}
+    value: ${{ steps.create-matrix.outputs.matrix }}
   matrix-json:
     description: 'Raw JSON string of the matrix'
     value: ${{ steps.create-matrix.outputs.matrix-json }}
