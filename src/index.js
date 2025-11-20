@@ -28,7 +28,7 @@ async function run() {
     core.info('📋 Extracting deployment configuration from .koala.toml files for different environments');
 
     // Build the command
-    let cmd = `npx --yes workflow-utils get-services-env-config -dir . -outputFormat github-matrix -branch ${branch} -actionTag ${tag}`;
+    let cmd = `npx --yes workflow-utils get-services-env-config -dir . -outputFormat github-matrix -branch ${branch} -actionTag ${tag} -token ${githubToken}`;
 
     if (overlay) {
       core.info(`🎯 Filtering for environment: ${overlay}`);
