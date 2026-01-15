@@ -15,6 +15,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+
       - name: Create test monorepo structure
         run: |
           # Create .koala-monorepo.json
@@ -72,13 +77,13 @@ jobs:
 
       - name: Verify matrix output
         run: |
-          echo "Matrix output: ${{ steps.matrix-all.outputs.matrix-json }}"
+          echo "Matrix output: ${{ steps.matrix-all.outputs.matrix }}"
 
           # Verify it's valid JSON
-          echo '${{ steps.matrix-all.outputs.matrix-json }}' | jq empty
+          echo '${{ steps.matrix-all.outputs.matrix }}' | jq empty
 
           # Check that we have entries
-          ENTRY_COUNT=$(echo '${{ steps.matrix-all.outputs.matrix-json }}' | jq '.include | length')
+          ENTRY_COUNT=$(echo '${{ steps.matrix-all.outputs.matrix }}' | jq '.include | length')
           if [[ $ENTRY_COUNT -lt 1 ]]; then
             echo "Expected at least 1 matrix entry, got $ENTRY_COUNT"
             exit 1
@@ -92,6 +97,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
 
       - name: Create test monorepo structure
         run: |
@@ -132,12 +142,12 @@ jobs:
 
       - name: Verify production matrix
         run: |
-          echo "Matrix: ${{ steps.matrix-prod.outputs.matrix-json }}"
-          echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq .
+          echo "Matrix: ${{ steps.matrix-prod.outputs.matrix }}"
+          echo '${{ steps.matrix-prod.outputs.matrix }}' | jq .
 
           # Verify all entries are for production
-          PROD_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq '[.include[] | select(.environment == "production")] | length')
-          TOTAL_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq '.include | length')
+          PROD_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix }}' | jq '[.include[] | select(.environment == "production")] | length')
+          TOTAL_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix }}' | jq '.include | length')
 
           if [[ $PROD_COUNT -ne $TOTAL_COUNT ]]; then
             echo "Expected all entries to be production, got $PROD_COUNT out of $TOTAL_COUNT"
@@ -150,16 +160,19 @@ jobs:
     runs-on: ubuntu-latest
     name: Test with custom repository path
     steps:
-      - name: Checkout to custom path
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          path: custom-repo
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
 
       - name: Create test structure in custom path
         run: |
-          cd custom-repo
+          mkdir -p custom-repo
 
-          cat > .koala-monorepo.json << 'EOF'
+          cat > custom-repo/.koala-monorepo.json << 'EOF'
           {
             "services": [
               {
@@ -170,9 +183,9 @@ jobs:
           }
           EOF
 
-          mkdir -p services/custom
+          mkdir -p custom-repo/services/custom
 
-          cat > services/custom/.koala.toml << 'EOF'
+          cat > custom-repo/services/custom/.koala.toml << 'EOF'
           [deployment]
           environments = ["dev"]
 
@@ -190,11 +203,11 @@ jobs:
 
       - name: Verify custom path matrix
         run: |
-          echo "Matrix: ${{ steps.matrix.outputs.matrix-json }}"
-          echo '${{ steps.matrix.outputs.matrix-json }}' | jq .
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+          echo '${{ steps.matrix.outputs.matrix }}' | jq .
 
           # Verify we got results
-          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix-json }}' | jq '.include | length')
+          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
           if [[ $ENTRY_COUNT -lt 1 ]]; then
             echo "Expected at least 1 entry for custom path"
             exit 1
@@ -208,6 +221,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
 
       - name: Create test structure
         run: |
@@ -241,10 +259,10 @@ jobs:
 
       - name: Verify tag in matrix
         run: |
-          echo '${{ steps.matrix.outputs.matrix-json }}' | jq .
+          echo '${{ steps.matrix.outputs.matrix }}' | jq .
 
           # Check that tag is in the matrix
-          TAG_VALUE=$(echo '${{ steps.matrix.outputs.matrix-json }}' | jq -r '.include[0].tag')
+          TAG_VALUE=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[0].tag')
 
           if [[ "$TAG_VALUE" != "v3.5.7" ]]; then
             echo "Expected tag v3.5.7, got $TAG_VALUE"
@@ -252,3 +270,685 @@ jobs:
           fi
 
           echo "✅ Tag properly injected into matrix"
+
+  test-skyhook-self-contained:
+    runs-on: ubuntu-latest
+    name: Test Skyhook self-contained config
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create Skyhook test structure
+        run: |
+          # Create skyhook.yaml with self-contained environments
+          cat > skyhook.yaml << 'EOF'
+          environments:
+            - name: dev-namespace
+              cluster_name: dev-cluster
+              cloud_provider: aws
+              location: us-east-1
+              namespace: dev-namespace
+              deploy_tool: kubectl
+            - name: prod-namespace
+              cluster_name: prod-cluster
+              cloud_provider: aws
+              location: us-west-2
+              namespace: prod-namespace
+              deploy_tool: argocd
+          services:
+            - name: api-service
+              path: services/api
+              buildTool: npm
+              dockerfilePath: Dockerfile
+              dockerfileContext: .
+            - name: web-service
+              path: services/web
+              buildTool: npm
+          EOF
+
+          mkdir -p services/api services/web
+          echo "Skyhook test structure created"
+
+      - name: Test Skyhook matrix generation
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Skyhook matrix output
+        run: |
+          echo "Matrix output: ${{ steps.matrix.outputs.matrix }}"
+          echo "Config format: ${{ steps.matrix.outputs.config-format }}"
+
+          # Verify config format is skyhook
+          if [[ "${{ steps.matrix.outputs.config-format }}" != "skyhook" ]]; then
+            echo "Expected config-format 'skyhook', got '${{ steps.matrix.outputs.config-format }}'"
+            exit 1
+          fi
+
+          # Verify it's valid JSON
+          echo '${{ steps.matrix.outputs.matrix }}' | jq empty
+
+          # Check that we have 4 entries (2 services x 2 environments)
+          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
+          if [[ $ENTRY_COUNT -ne 4 ]]; then
+            echo "Expected 4 matrix entries, got $ENTRY_COUNT"
+            exit 1
+          fi
+
+          # Verify cluster_name is present
+          CLUSTER=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[0].cluster_name')
+          if [[ -z "$CLUSTER" || "$CLUSTER" == "null" ]]; then
+            echo "Expected cluster_name in matrix entry"
+            exit 1
+          fi
+
+          echo "✅ Skyhook self-contained matrix generated correctly"
+
+  test-skyhook-env-filter:
+    runs-on: ubuntu-latest
+    name: Test Skyhook environment filtering
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create Skyhook test structure
+        run: |
+          cat > skyhook.yaml << 'EOF'
+          environments:
+            - name: dev
+              cluster_name: dev-cluster
+              deploy_tool: kubectl
+            - name: staging
+              cluster_name: staging-cluster
+              deploy_tool: kubectl
+            - name: production
+              cluster_name: prod-cluster
+              deploy_tool: argocd
+          services:
+            - name: api-service
+              path: services/api
+          EOF
+
+          mkdir -p services/api
+
+      - name: Test environment filter
+        id: matrix
+        uses: ./
+        with:
+          overlay: production
+          tag: v2.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify filtered matrix
+        run: |
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+          echo '${{ steps.matrix.outputs.matrix }}' | jq .
+
+          # Verify all entries are for production
+          PROD_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.environment == "production")] | length')
+          TOTAL_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
+
+          if [[ $PROD_COUNT -ne $TOTAL_COUNT ]]; then
+            echo "Expected all entries to be production, got $PROD_COUNT out of $TOTAL_COUNT"
+            exit 1
+          fi
+
+          if [[ $TOTAL_COUNT -ne 1 ]]; then
+            echo "Expected 1 production entry, got $TOTAL_COUNT"
+            exit 1
+          fi
+
+          echo "✅ Skyhook environment filter working correctly"
+
+  test-skyhook-deploy-tool-filter:
+    runs-on: ubuntu-latest
+    name: Test Skyhook deploy tool filtering
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create Skyhook test structure
+        run: |
+          cat > skyhook.yaml << 'EOF'
+          environments:
+            - name: dev
+              cluster_name: dev-cluster
+              deploy_tool: kubectl
+            - name: staging
+              cluster_name: staging-cluster
+              deploy_tool: kubectl
+            - name: production
+              cluster_name: prod-cluster
+              deploy_tool: argocd
+          services:
+            - name: api-service
+              path: services/api
+          EOF
+
+          mkdir -p services/api
+
+      - name: Test kubectl deploy tool filter
+        id: matrix
+        uses: ./
+        with:
+          deploy-tool-filter: kubectl
+          tag: v2.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify deploy tool filtered matrix
+        run: |
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+          echo '${{ steps.matrix.outputs.matrix }}' | jq .
+
+          # Verify all entries use kubectl
+          KUBECTL_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.deploy_tool == "kubectl")] | length')
+          TOTAL_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
+
+          if [[ $KUBECTL_COUNT -ne $TOTAL_COUNT ]]; then
+            echo "Expected all entries to use kubectl, got $KUBECTL_COUNT out of $TOTAL_COUNT"
+            exit 1
+          fi
+
+          if [[ $TOTAL_COUNT -ne 2 ]]; then
+            echo "Expected 2 kubectl entries (dev + staging), got $TOTAL_COUNT"
+            exit 1
+          fi
+
+          echo "✅ Skyhook deploy tool filter working correctly"
+
+  test-skyhook-infra-repo:
+    runs-on: ubuntu-latest
+    name: Test Skyhook with external infra repo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create Skyhook and infra repo structure
+        run: |
+          # Create skyhook.yaml without environments (will use infra repo)
+          cat > skyhook.yaml << 'EOF'
+          services:
+            - name: api-service
+              path: services/api
+              buildTool: npm
+          EOF
+
+          mkdir -p services/api
+
+          # Create mock infra repo structure
+          mkdir -p infra-repo/skyhook/environments
+
+          cat > infra-repo/skyhook/environments/dev.yaml << 'EOF'
+          cluster_name: dev-cluster
+          cloud_provider: aws
+          account: '123456789'
+          location: us-east-1
+          namespace: dev-namespace
+          deploy_tool: kubectl
+          EOF
+
+          cat > infra-repo/skyhook/environments/production.yaml << 'EOF'
+          cluster_name: prod-cluster
+          cloud_provider: aws
+          account: '987654321'
+          location: us-west-2
+          namespace: prod-namespace
+          deploy_tool: argocd
+          EOF
+
+          echo "Infra repo structure created"
+
+      - name: Test with infra repo path
+        id: matrix
+        uses: ./
+        with:
+          tag: v3.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          infra-repo-path: infra-repo
+
+      - name: Verify infra repo matrix
+        run: |
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+          echo '${{ steps.matrix.outputs.matrix }}' | jq .
+
+          # Verify we got entries from external environments
+          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
+          if [[ $ENTRY_COUNT -ne 2 ]]; then
+            echo "Expected 2 entries (1 service x 2 environments), got $ENTRY_COUNT"
+            exit 1
+          fi
+
+          # Verify account field is present (only in infra repo format)
+          ACCOUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[0].account')
+          if [[ -z "$ACCOUNT" || "$ACCOUNT" == "null" ]]; then
+            echo "Expected account field from infra repo environments"
+            exit 1
+          fi
+
+          echo "✅ Skyhook infra repo integration working correctly"
+
+  test-auto-detect-skyhook:
+    runs-on: ubuntu-latest
+    name: Test auto-detection prefers Skyhook
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create both Koala and Skyhook configs
+        run: |
+          # Create Koala config
+          cat > .koala-monorepo.json << 'EOF'
+          {
+            "services": [
+              {
+                "name": "koala-service",
+                "path": "services/koala"
+              }
+            ]
+          }
+          EOF
+
+          mkdir -p services/koala
+          cat > services/koala/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev"]
+          [deployment.dev]
+          replicas = 1
+          EOF
+
+          # Create Skyhook config (should be preferred)
+          cat > skyhook.yaml << 'EOF'
+          environments:
+            - name: skyhook-env
+              cluster_name: skyhook-cluster
+              deploy_tool: kubectl
+          services:
+            - name: skyhook-service
+              path: services/skyhook
+          EOF
+
+          mkdir -p services/skyhook
+
+      - name: Test auto-detection
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Skyhook was detected
+        run: |
+          echo "Config format: ${{ steps.matrix.outputs.config-format }}"
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+
+          if [[ "${{ steps.matrix.outputs.config-format }}" != "skyhook" ]]; then
+            echo "Expected auto-detection to choose 'skyhook', got '${{ steps.matrix.outputs.config-format }}'"
+            exit 1
+          fi
+
+          # Verify it used Skyhook service name
+          SERVICE=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[0].service')
+          if [[ "$SERVICE" != "skyhook-service" ]]; then
+            echo "Expected service 'skyhook-service', got '$SERVICE'"
+            exit 1
+          fi
+
+          echo "✅ Auto-detection correctly prefers Skyhook over Koala"
+
+  test-unit-tests:
+    runs-on: ubuntu-latest
+    name: Run unit tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run unit tests
+        run: npm test
+
+  test-skyhook-error-no-config:
+    runs-on: ubuntu-latest
+    name: Test Skyhook error - no config
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Remove all config files
+        run: |
+          rm -f skyhook.yaml .koala-monorepo.json
+
+      - name: Test that action fails gracefully
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Verify action failed
+        run: |
+          if [[ "${{ steps.matrix.outcome }}" != "failure" ]]; then
+            echo "Expected action to fail when no config exists"
+            exit 1
+          fi
+          echo "✅ Action correctly fails when no config found"
+
+  test-skyhook-error-invalid-yaml:
+    runs-on: ubuntu-latest
+    name: Test Skyhook error - invalid YAML
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create invalid YAML
+        run: |
+          cat > skyhook.yaml << 'EOF'
+          services: [invalid yaml syntax: {
+          EOF
+
+      - name: Test that action fails gracefully
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Verify action failed
+        run: |
+          if [[ "${{ steps.matrix.outcome }}" != "failure" ]]; then
+            echo "Expected action to fail for invalid YAML"
+            exit 1
+          fi
+          echo "✅ Action correctly fails for invalid YAML"
+
+  test-skyhook-error-missing-services:
+    runs-on: ubuntu-latest
+    name: Test Skyhook error - missing services
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create config without services
+        run: |
+          cat > skyhook.yaml << 'EOF'
+          environments:
+            - name: dev
+              cluster_name: dev-cluster
+          EOF
+
+      - name: Test that action fails gracefully
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Verify action failed
+        run: |
+          if [[ "${{ steps.matrix.outcome }}" != "failure" ]]; then
+            echo "Expected action to fail when services missing"
+            exit 1
+          fi
+          echo "✅ Action correctly fails when services missing"
+
+  test-skyhook-error-empty-matrix:
+    runs-on: ubuntu-latest
+    name: Test Skyhook error - empty matrix from filter
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create valid config
+        run: |
+          cat > skyhook.yaml << 'EOF'
+          environments:
+            - name: dev
+              cluster_name: dev-cluster
+          services:
+            - name: api
+              path: services/api
+          EOF
+          mkdir -p services/api
+
+      - name: Test that action fails when filter matches nothing
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          overlay: nonexistent-environment
+        continue-on-error: true
+
+      - name: Verify action failed
+        run: |
+          if [[ "${{ steps.matrix.outcome }}" != "failure" ]]; then
+            echo "Expected action to fail when filter produces empty matrix"
+            exit 1
+          fi
+          echo "✅ Action correctly fails when filter produces empty matrix"
+
+  test-koala-backwards-compat:
+    runs-on: ubuntu-latest
+    name: Test Koala backwards compatibility
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create Koala-only config (no skyhook.yaml)
+        run: |
+          # Ensure no skyhook.yaml exists
+          rm -f skyhook.yaml
+
+          # Create Koala config
+          cat > .koala-monorepo.json << 'EOF'
+          {
+            "services": [
+              {
+                "name": "koala-service",
+                "path": "services/koala"
+              }
+            ]
+          }
+          EOF
+
+          mkdir -p services/koala
+
+          cat > services/koala/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev", "production"]
+
+          [deployment.dev]
+          replicas = 1
+
+          [deployment.production]
+          replicas = 3
+          EOF
+
+      - name: Test Koala format detection
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Koala format was used
+        run: |
+          echo "Config format: ${{ steps.matrix.outputs.config-format }}"
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+
+          if [[ "${{ steps.matrix.outputs.config-format }}" != "koala" ]]; then
+            echo "Expected config-format 'koala', got '${{ steps.matrix.outputs.config-format }}'"
+            exit 1
+          fi
+
+          # Verify matrix is valid JSON
+          echo '${{ steps.matrix.outputs.matrix }}' | jq empty
+
+          echo "✅ Koala backwards compatibility working correctly"
+
+  test-explicit-koala-mode:
+    runs-on: ubuntu-latest
+    name: Test explicit Koala mode
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build action
+        run: npm install && npm run build
+
+      - name: Create both configs
+        run: |
+          # Create Skyhook config
+          cat > skyhook.yaml << 'EOF'
+          environments:
+            - name: skyhook-env
+              cluster_name: skyhook-cluster
+          services:
+            - name: skyhook-service
+              path: services/skyhook
+          EOF
+          mkdir -p services/skyhook
+
+          # Create Koala config
+          cat > .koala-monorepo.json << 'EOF'
+          {
+            "services": [
+              {
+                "name": "koala-service",
+                "path": "services/koala"
+              }
+            ]
+          }
+          EOF
+          mkdir -p services/koala
+          cat > services/koala/.koala.toml << 'EOF'
+          [deployment]
+          environments = ["dev"]
+          [deployment.dev]
+          replicas = 1
+          EOF
+
+      - name: Test explicit Koala mode overrides auto-detect
+        id: matrix
+        uses: ./
+        with:
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          config-format: koala
+
+      - name: Verify Koala was used despite Skyhook existing
+        run: |
+          echo "Config format: ${{ steps.matrix.outputs.config-format }}"
+
+          if [[ "${{ steps.matrix.outputs.config-format }}" != "koala" ]]; then
+            echo "Expected config-format 'koala' with explicit mode, got '${{ steps.matrix.outputs.config-format }}'"
+            exit 1
+          fi
+
+          echo "✅ Explicit config-format correctly overrides auto-detection"
