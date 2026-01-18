@@ -288,8 +288,9 @@ jobs:
 
       - name: Create Skyhook test structure
         run: |
-          # Create skyhook.yaml with self-contained environments
-          cat > skyhook.yaml << 'EOF'
+          # Create .skyhook/skyhook.yaml with self-contained environments
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
             - name: dev-namespace
               cluster_name: dev-cluster
@@ -371,7 +372,8 @@ jobs:
 
       - name: Create Skyhook test structure
         run: |
-          cat > skyhook.yaml << 'EOF'
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
             - name: dev
               cluster_name: dev-cluster
@@ -435,7 +437,8 @@ jobs:
 
       - name: Create Skyhook test structure
         run: |
-          cat > skyhook.yaml << 'EOF'
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
             - name: dev
               cluster_name: dev-cluster
@@ -499,8 +502,9 @@ jobs:
 
       - name: Create Skyhook and infra repo structure
         run: |
-          # Create skyhook.yaml without environments (will use infra repo)
-          cat > skyhook.yaml << 'EOF'
+          # Create .skyhook/skyhook.yaml without environments (will use infra repo)
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           services:
             - name: api-service
               path: services/api
@@ -599,7 +603,8 @@ jobs:
           EOF
 
           # Create Skyhook config (should be preferred)
-          cat > skyhook.yaml << 'EOF'
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
             - name: skyhook-env
               cluster_name: skyhook-cluster
@@ -672,7 +677,7 @@ jobs:
 
       - name: Remove all config files
         run: |
-          rm -f skyhook.yaml .koala-monorepo.json
+          rm -rf .skyhook skyhook.yaml .koala-monorepo.json
 
       - name: Test that action fails gracefully
         id: matrix
@@ -707,7 +712,8 @@ jobs:
 
       - name: Create invalid YAML
         run: |
-          cat > skyhook.yaml << 'EOF'
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           services: [invalid yaml syntax: {
           EOF
 
@@ -744,7 +750,8 @@ jobs:
 
       - name: Create config without services
         run: |
-          cat > skyhook.yaml << 'EOF'
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
             - name: dev
               cluster_name: dev-cluster
@@ -783,7 +790,8 @@ jobs:
 
       - name: Create valid config
         run: |
-          cat > skyhook.yaml << 'EOF'
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
             - name: dev
               cluster_name: dev-cluster
@@ -833,7 +841,7 @@ jobs:
       - name: Create Koala-only config (no skyhook.yaml)
         run: |
           # Ensure no skyhook.yaml exists
-          rm -f skyhook.yaml
+          rm -rf .skyhook skyhook.yaml
 
           # Create Koala config
           cat > .koala-monorepo.json << 'EOF'
@@ -905,7 +913,8 @@ jobs:
       - name: Create both configs
         run: |
           # Create Skyhook config
-          cat > skyhook.yaml << 'EOF'
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
             - name: skyhook-env
               cluster_name: skyhook-cluster

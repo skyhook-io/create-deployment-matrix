@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { CONFIG_FORMATS, detectConfigFormat, resolveConfigFormat } = require('../src/config/config-detector');
+const { CONFIG_FORMATS, detectConfigFormat, getSkyhookConfigPath, resolveConfigFormat } = require('../src/config/config-detector');
 
 describe('config-detector', () => {
   const testDir = '/tmp/config-detector-test';
@@ -19,8 +19,38 @@ describe('config-detector', () => {
     }
   });
 
+  describe('getSkyhookConfigPath', () => {
+    test('returns .skyhook/skyhook.yaml when it exists', () => {
+      fs.mkdirSync(path.join(testDir, '.skyhook'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, '.skyhook', 'skyhook.yaml'), 'services: []');
+      expect(getSkyhookConfigPath(testDir)).toBe(path.join(testDir, '.skyhook', 'skyhook.yaml'));
+    });
+
+    test('returns root skyhook.yaml when .skyhook/skyhook.yaml does not exist', () => {
+      fs.writeFileSync(path.join(testDir, 'skyhook.yaml'), 'services: []');
+      expect(getSkyhookConfigPath(testDir)).toBe(path.join(testDir, 'skyhook.yaml'));
+    });
+
+    test('prefers .skyhook/skyhook.yaml over root skyhook.yaml', () => {
+      fs.mkdirSync(path.join(testDir, '.skyhook'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, '.skyhook', 'skyhook.yaml'), 'services: []');
+      fs.writeFileSync(path.join(testDir, 'skyhook.yaml'), 'services: []');
+      expect(getSkyhookConfigPath(testDir)).toBe(path.join(testDir, '.skyhook', 'skyhook.yaml'));
+    });
+
+    test('returns null when no skyhook config exists', () => {
+      expect(getSkyhookConfigPath(testDir)).toBeNull();
+    });
+  });
+
   describe('detectConfigFormat', () => {
-    test('returns skyhook when only skyhook.yaml exists', () => {
+    test('returns skyhook when only .skyhook/skyhook.yaml exists', () => {
+      fs.mkdirSync(path.join(testDir, '.skyhook'), { recursive: true });
+      fs.writeFileSync(path.join(testDir, '.skyhook', 'skyhook.yaml'), 'services: []');
+      expect(detectConfigFormat(testDir)).toBe(CONFIG_FORMATS.SKYHOOK);
+    });
+
+    test('returns skyhook when only root skyhook.yaml exists', () => {
       fs.writeFileSync(path.join(testDir, 'skyhook.yaml'), 'services: []');
       expect(detectConfigFormat(testDir)).toBe(CONFIG_FORMATS.SKYHOOK);
     });

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { glob } = require('glob');
+const { getSkyhookConfigPath } = require('./config-detector');
 
 /**
  * Parse a skyhook.yaml configuration file
@@ -142,7 +143,10 @@ function validateEnvironment(env) {
  * @returns {Promise<Object>} - Parsed configuration { services: Array, environments: Array }
  */
 async function parseSkyhookConfig(repoPath, options = {}) {
-  const skyhookPath = path.join(repoPath, 'skyhook.yaml');
+  const skyhookPath = getSkyhookConfigPath(repoPath);
+  if (!skyhookPath) {
+    throw new Error(`Skyhook configuration file not found. Expected '.skyhook/skyhook.yaml' or 'skyhook.yaml' in: ${repoPath}`);
+  }
   const config = parseSkyhookFile(skyhookPath);
 
   // Validate the config

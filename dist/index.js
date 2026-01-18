@@ -30049,15 +30049,37 @@ const CONFIG_FORMATS = {
 };
 
 /**
+ * Get the path to the Skyhook config file
+ * Supports both .skyhook/skyhook.yaml (preferred) and skyhook.yaml (legacy)
+ * @param {string} repoPath - Path to the repository root
+ * @returns {string|null} - Path to skyhook.yaml if found, null otherwise
+ */
+function getSkyhookConfigPath(repoPath) {
+  // Prefer .skyhook/skyhook.yaml
+  const skyhookDirPath = path.join(repoPath, '.skyhook', 'skyhook.yaml');
+  if (fs.existsSync(skyhookDirPath)) {
+    return skyhookDirPath;
+  }
+
+  // Fallback to root skyhook.yaml for backwards compatibility
+  const skyhookRootPath = path.join(repoPath, 'skyhook.yaml');
+  if (fs.existsSync(skyhookRootPath)) {
+    return skyhookRootPath;
+  }
+
+  return null;
+}
+
+/**
  * Detect which configuration format is present in the repository
  * @param {string} repoPath - Path to the repository root
  * @returns {'skyhook' | 'koala' | null} - Detected config format or null if none found
  */
 function detectConfigFormat(repoPath) {
-  const skyhookPath = path.join(repoPath, 'skyhook.yaml');
+  const skyhookPath = getSkyhookConfigPath(repoPath);
   const koalaPath = path.join(repoPath, '.koala-monorepo.json');
 
-  const hasSkyhook = fs.existsSync(skyhookPath);
+  const hasSkyhook = skyhookPath !== null;
   const hasKoala = fs.existsSync(koalaPath);
 
   if (hasSkyhook && hasKoala) {
@@ -30084,8 +30106,9 @@ function detectConfigFormat(repoPath) {
  */
 function getConfigPaths(repoPath, format) {
   if (format === CONFIG_FORMATS.SKYHOOK) {
+    const skyhookPath = getSkyhookConfigPath(repoPath);
     return {
-      primary: path.join(repoPath, 'skyhook.yaml'),
+      primary: skyhookPath || path.join(repoPath, '.skyhook', 'skyhook.yaml'),
       environmentsDir: null // Will be set from infra repo path if provided
     };
   }
@@ -30120,7 +30143,7 @@ function resolveConfigFormat(repoPath, configFormatInput) {
   const detected = detectConfigFormat(repoPath);
   if (!detected) {
     throw new Error(
-      `No configuration found. Expected either 'skyhook.yaml' or '.koala-monorepo.json' at repository root: ${repoPath}`
+      `No configuration found. Expected '.skyhook/skyhook.yaml', 'skyhook.yaml', or '.koala-monorepo.json' at repository root: ${repoPath}`
     );
   }
 
@@ -30131,6 +30154,7 @@ module.exports = {
   CONFIG_FORMATS,
   detectConfigFormat,
   getConfigPaths,
+  getSkyhookConfigPath,
   resolveConfigFormat
 };
 
@@ -30144,6 +30168,7 @@ const fs = __nccwpck_require__(9896);
 const path = __nccwpck_require__(6928);
 const yaml = __nccwpck_require__(4281);
 const { glob } = __nccwpck_require__(1363);
+const { getSkyhookConfigPath } = __nccwpck_require__(7771);
 
 /**
  * Parse a skyhook.yaml configuration file
@@ -30284,7 +30309,10 @@ function validateEnvironment(env) {
  * @returns {Promise<Object>} - Parsed configuration { services: Array, environments: Array }
  */
 async function parseSkyhookConfig(repoPath, options = {}) {
-  const skyhookPath = path.join(repoPath, 'skyhook.yaml');
+  const skyhookPath = getSkyhookConfigPath(repoPath);
+  if (!skyhookPath) {
+    throw new Error(`Skyhook configuration file not found. Expected '.skyhook/skyhook.yaml' or 'skyhook.yaml' in: ${repoPath}`);
+  }
   const config = parseSkyhookFile(skyhookPath);
 
   // Validate the config
