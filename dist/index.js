@@ -40355,7 +40355,7 @@ const exec = __nccwpck_require__(5236);
 const fs = __nccwpck_require__(9896);
 const path = __nccwpck_require__(6928);
 
-const { CONFIG_FORMATS, resolveConfigFormat } = __nccwpck_require__(7771);
+const { getSkyhookConfigPath } = __nccwpck_require__(7771);
 const { parseSkyhookConfig } = __nccwpck_require__(7396);
 const { buildMatrix, getMatrixStats, validateMatrixNotEmpty } = __nccwpck_require__(6104);
 
@@ -40478,7 +40478,6 @@ async function run() {
     const tag = core.getInput('tag');
     const githubToken = core.getInput('github-token');
     const repoPath = core.getInput('repo-path') || '.';
-    const configFormatInput = core.getInput('config-format') || 'auto';
     const infraRepoPath = core.getInput('infra-repo-path');
     const environmentsPath = core.getInput('environments-path') || 'skyhook/environments';
     const deployToolFilter = core.getInput('deploy-tool-filter') || 'all';
@@ -40496,24 +40495,26 @@ async function run() {
       throw new Error('github-token input is required');
     }
 
-    // Resolve configuration format
-    const configFormat = resolveConfigFormat(repoPath, configFormatInput);
-    core.info(`Configuration format: ${configFormat}`);
-    core.setOutput('config-format', configFormat);
+    // Detect which config formats are present
+    const hasSkyhook = getSkyhookConfigPath(repoPath) !== null;
+    const hasKoala = fs.existsSync(path.join(repoPath, '.koala-monorepo.json'));
 
-    // Warn if both config formats exist
-    if (configFormatInput === 'auto' || !configFormatInput) {
-      const hasSkyhook = fs.existsSync(path.join(repoPath, 'skyhook.yaml'));
-      const hasKoala = fs.existsSync(path.join(repoPath, '.koala-monorepo.json'));
-      if (hasSkyhook && hasKoala) {
-        core.warning('Both skyhook.yaml and .koala-monorepo.json found. Using Skyhook format. Consider removing the unused config file.');
-      }
+    if (!hasSkyhook && !hasKoala) {
+      throw new Error(`No configuration found. Expected '.skyhook/skyhook.yaml', 'skyhook.yaml', or '.koala-monorepo.json' at repository root: ${repoPath}`);
     }
 
-    let matrixObject;
+    const configFormats = [];
+    if (hasSkyhook) configFormats.push('skyhook');
+    if (hasKoala) configFormats.push('koala');
 
-    if (configFormat === CONFIG_FORMATS.SKYHOOK) {
-      matrixObject = await runSkyhookMode({
+    core.info(`Detected configuration format(s): ${configFormats.join(', ')}`);
+    core.setOutput('config-format', configFormats.join(','));
+
+    let matrixEntries = [];
+
+    // Process Skyhook config if present
+    if (hasSkyhook) {
+      const skyhookMatrix = await runSkyhookMode({
         overlay,
         tag,
         repoPath,
@@ -40521,14 +40522,28 @@ async function run() {
         environmentsPath,
         deployToolFilter
       });
-    } else {
-      matrixObject = await runKoalaMode({
+      matrixEntries = matrixEntries.concat(skyhookMatrix.include || []);
+      core.info(`Added ${skyhookMatrix.include?.length || 0} entries from Skyhook config`);
+    }
+
+    // Process Koala config if present
+    if (hasKoala) {
+      const koalaMatrix = await runKoalaMode({
         overlay,
         branch,
         tag,
         githubToken,
         repoPath
       });
+      matrixEntries = matrixEntries.concat(koalaMatrix.include || []);
+      core.info(`Added ${koalaMatrix.include?.length || 0} entries from Koala config`);
+    }
+
+    const matrixObject = { include: matrixEntries };
+
+    // Validate combined matrix is not empty
+    if (matrixEntries.length === 0) {
+      throw new Error('Generated matrix is empty. No service/environment combinations found.');
     }
 
     // Set output as JSON string for GitHub Actions
@@ -40538,11 +40553,8 @@ async function run() {
     core.info('Generated deployment matrix:');
     core.info(JSON.stringify(matrixObject, null, 2));
 
-    // Log statistics for Skyhook mode
-    if (configFormat === CONFIG_FORMATS.SKYHOOK) {
-      const stats = getMatrixStats(matrixObject);
-      core.info(`Matrix contains ${stats.totalEntries} entries across ${stats.serviceCount} service(s) and ${stats.environmentCount} environment(s)`);
-    }
+    const stats = getMatrixStats(matrixObject);
+    core.info(`Matrix contains ${stats.totalEntries} entries across ${stats.serviceCount} service(s) and ${stats.environmentCount} environment(s)`);
 
   } catch (error) {
     core.setFailed(error.message);

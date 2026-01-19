@@ -565,12 +565,17 @@ jobs:
 
           echo "✅ Skyhook infra repo integration working correctly"
 
-  test-auto-detect-skyhook:
+  test-merged-configs:
     runs-on: ubuntu-latest
-    name: Test auto-detection prefers Skyhook
+    name: Test merging both Skyhook and Koala configs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -602,7 +607,7 @@ jobs:
           replicas = 1
           EOF
 
-          # Create Skyhook config (should be preferred)
+          # Create Skyhook config
           mkdir -p .skyhook
           cat > .skyhook/skyhook.yaml << 'EOF'
           environments:
@@ -616,31 +621,40 @@ jobs:
 
           mkdir -p services/skyhook
 
-      - name: Test auto-detection
+      - name: Test merged configs
         id: matrix
         uses: ./
         with:
           tag: v1.0.0
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify Skyhook was detected
+      - name: Verify both configs are merged
         run: |
           echo "Config format: ${{ steps.matrix.outputs.config-format }}"
           echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
 
-          if [[ "${{ steps.matrix.outputs.config-format }}" != "skyhook" ]]; then
-            echo "Expected auto-detection to choose 'skyhook', got '${{ steps.matrix.outputs.config-format }}'"
+          # Verify both formats were detected
+          if [[ "${{ steps.matrix.outputs.config-format }}" != "skyhook,koala" ]]; then
+            echo "Expected config-format 'skyhook,koala', got '${{ steps.matrix.outputs.config-format }}'"
             exit 1
           fi
 
-          # Verify it used Skyhook service name
-          SERVICE=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[0].service')
-          if [[ "$SERVICE" != "skyhook-service" ]]; then
-            echo "Expected service 'skyhook-service', got '$SERVICE'"
+          # Verify we have entries from both configs
+          SKYHOOK_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service == "skyhook-service")] | length')
+          KOALA_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service == "koala-service")] | length')
+
+          if [[ $SKYHOOK_COUNT -lt 1 ]]; then
+            echo "Expected at least 1 entry from Skyhook config, got $SKYHOOK_COUNT"
             exit 1
           fi
 
-          echo "✅ Auto-detection correctly prefers Skyhook over Koala"
+          if [[ $KOALA_COUNT -lt 1 ]]; then
+            echo "Expected at least 1 entry from Koala config, got $KOALA_COUNT"
+            exit 1
+          fi
+
+          TOTAL_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
+          echo "✅ Both configs merged correctly: $SKYHOOK_COUNT Skyhook + $KOALA_COUNT Koala = $TOTAL_COUNT total entries"
 
   test-unit-tests:
     runs-on: ubuntu-latest
@@ -890,74 +904,3 @@ jobs:
 
           echo "✅ Koala backwards compatibility working correctly"
 
-  test-explicit-koala-mode:
-    runs-on: ubuntu-latest
-    name: Test explicit Koala mode
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure git user
-        run: |
-          git config --global user.email "test@example.com"
-          git config --global user.name "Test User"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build action
-        run: npm install && npm run build
-
-      - name: Create both configs
-        run: |
-          # Create Skyhook config
-          mkdir -p .skyhook
-          cat > .skyhook/skyhook.yaml << 'EOF'
-          environments:
-            - name: skyhook-env
-              cluster_name: skyhook-cluster
-          services:
-            - name: skyhook-service
-              path: services/skyhook
-          EOF
-          mkdir -p services/skyhook
-
-          # Create Koala config
-          cat > .koala-monorepo.json << 'EOF'
-          {
-            "services": [
-              {
-                "name": "koala-service",
-                "path": "services/koala"
-              }
-            ]
-          }
-          EOF
-          mkdir -p services/koala
-          cat > services/koala/.koala.toml << 'EOF'
-          [deployment]
-          environments = ["dev"]
-          [deployment.dev]
-          replicas = 1
-          EOF
-
-      - name: Test explicit Koala mode overrides auto-detect
-        id: matrix
-        uses: ./
-        with:
-          tag: v1.0.0
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          config-format: koala
-
-      - name: Verify Koala was used despite Skyhook existing
-        run: |
-          echo "Config format: ${{ steps.matrix.outputs.config-format }}"
-
-          if [[ "${{ steps.matrix.outputs.config-format }}" != "koala" ]]; then
-            echo "Expected config-format 'koala' with explicit mode, got '${{ steps.matrix.outputs.config-format }}'"
-            exit 1
-          fi
-
-          echo "✅ Explicit config-format correctly overrides auto-detection"

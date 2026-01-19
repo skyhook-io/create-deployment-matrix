@@ -1,5 +1,5 @@
 name: 'Create Deployment Matrix'
-description: 'Creates a matrix for service deployment based on skyhook.yaml or .koala-monorepo.json configuration'
+description: 'Creates a matrix for service deployment by combining services from .skyhook/skyhook.yaml and/or .koala-monorepo.json configurations'
 author: 'Skyhook'
 
 branding:
@@ -24,19 +24,15 @@ inputs:
     description: 'The path to the repo'
     required: false
     default: '.'
-  config-format:
-    description: 'Configuration format to use: auto (default), skyhook, or koala'
-    required: false
-    default: 'auto'
   infra-repo-path:
-    description: 'Path to checked-out infra repo containing environment definitions'
+    description: 'Path to checked-out infra repo containing environment definitions (for Skyhook)'
     required: false
   environments-path:
-    description: 'Path to environments directory within infra repo'
+    description: 'Path to environments directory within infra repo (for Skyhook)'
     required: false
     default: 'skyhook/environments'
   deploy-tool-filter:
-    description: 'Filter by deploy tool: kubectl, argocd, or all (default)'
+    description: 'Filter by deploy tool: kubectl, argocd, or all (default). Only applies to Skyhook config.'
     required: false
     default: 'all'
 
@@ -44,7 +40,7 @@ outputs:
   matrix:
     description: 'JSON string of the deployment matrix for service deployments'
   config-format:
-    description: 'The configuration format that was detected/used (skyhook or koala)'
+    description: 'The configuration format(s) that were detected (comma-separated: skyhook,koala)'
 
 runs:
   using: 'node20'
