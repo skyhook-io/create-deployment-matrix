@@ -5,6 +5,63 @@ const { glob } = require('glob');
 const { getSkyhookConfigPath } = require('./config-detector');
 
 /**
+ * Convert camelCase to snake_case
+ * @param {string} str - camelCase string
+ * @returns {string} - snake_case string
+ */
+function camelToSnake(str) {
+  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+/**
+ * Normalize object keys from camelCase to snake_case
+ * @param {Object} obj - Object with camelCase keys
+ * @returns {Object} - Object with snake_case keys
+ */
+function normalizeKeys(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    return obj;
+  }
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const snakeKey = camelToSnake(key);
+    normalized[snakeKey] = value;
+  }
+  return normalized;
+}
+
+/**
+ * Normalize a service object - converts camelCase to snake_case
+ * @param {Object} service - Service configuration object
+ * @returns {Object} - Normalized service object
+ */
+function normalizeService(service) {
+  const normalized = normalizeKeys(service);
+
+  // Map deploymentRepo to repo for compatibility
+  if (normalized.deployment_repo && !normalized.repo) {
+    normalized.repo = normalized.deployment_repo;
+  }
+
+  // Map deploymentRepoPath to deployment_folder_path
+  if (normalized.deployment_repo_path && !normalized.deployment_folder_path) {
+    normalized.deployment_folder_path = normalized.deployment_repo_path;
+  }
+
+  return normalized;
+}
+
+/**
+ * Normalize an environment object - converts camelCase to snake_case
+ * @param {Object} env - Environment configuration object
+ * @returns {Object} - Normalized environment object
+ */
+function normalizeEnvironment(env) {
+  return normalizeKeys(env);
+}
+
+/**
  * Parse a skyhook.yaml configuration file
  * @param {string} filePath - Path to skyhook.yaml
  * @returns {Object} - Parsed configuration object
@@ -155,19 +212,23 @@ async function parseSkyhookConfig(repoPath, options = {}) {
     throw new Error(`Invalid skyhook.yaml:\n${validation.errors.join('\n')}`);
   }
 
-  const services = config.services || [];
-  let environments = [];
+  const rawServices = config.services || [];
+  let rawEnvironments = [];
 
   // Check for self-contained environments first
   if (config.environments && config.environments.length > 0) {
-    environments = config.environments;
+    rawEnvironments = config.environments;
   }
   // Then check for external infra repo environments
   else if (options.infraRepoPath) {
     const envPath = options.environmentsPath || 'skyhook/environments';
     const envDir = path.join(options.infraRepoPath, envPath);
-    environments = await parseEnvironmentFiles(envDir);
+    rawEnvironments = await parseEnvironmentFiles(envDir);
   }
+
+  // Normalize field names from camelCase to snake_case
+  const services = rawServices.map(normalizeService);
+  const environments = rawEnvironments.map(normalizeEnvironment);
 
   // Validate each environment
   environments.forEach((env, index) => {

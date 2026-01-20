@@ -1,3 +1,5 @@
+const { MatrixEntry } = require('./matrix-entry');
+
 /**
  * Build a GitHub Actions deployment matrix from services and environments
  * @param {Array} services - Array of service configurations
@@ -6,7 +8,7 @@
  * @param {string} options.tag - Image tag to inject
  * @param {string} options.envFilter - Environment filter (optional)
  * @param {string} options.deployToolFilter - Deploy tool filter: 'kubectl', 'argocd', or 'all' (optional)
- * @returns {Object} - GitHub Actions matrix object { include: Array }
+ * @returns {Object} - GitHub Actions matrix object { include: Array<MatrixEntry> }
  */
 function buildMatrix(services, environments, options = {}) {
   const { tag, envFilter, deployToolFilter = 'all' } = options;
@@ -26,36 +28,12 @@ function buildMatrix(services, environments, options = {}) {
   }
 
   // Build matrix entries for each service x environment combination
-  // Field names match Koala format for compatibility
+  let counter = 1;
   for (const service of services) {
     for (const env of filteredEnvs) {
-      const entry = {
-        // Core fields (matching Koala format exactly)
-        service_name: service.name,
-        service_dir: service.path,
-        service_tag: `${service.name}_${tag}`,  // Koala format: {service_name}_{tag}
-        overlay: env.name
-      };
-
-      // Service repo if present
-      if (service.repo) entry.service_repo = service.repo;
-
-      // Environment properties (matching Koala field names)
-      if (env.cluster_name) entry.cluster = env.cluster_name;
-      if (env.cloud_provider) entry.cloud_provider = env.cloud_provider;
-      if (env.location) entry.cluster_location = env.location;
-      if (env.namespace) entry.namespace = env.namespace;
-      if (env.account) entry.account = env.account;
-      if (env.deploy_tool) entry.deploy_tool = env.deploy_tool;
-
-      // Deployment repo info if present in environment
-      if (env.deployment_repo) entry.deployment_repo = env.deployment_repo;
-      if (env.deployment_folder_path) entry.deployment_folder_path = env.deployment_folder_path;
-
-      // Auto deploy flag
-      if (env.auto_deploy !== undefined) entry.auto_deploy = String(env.auto_deploy);
-
+      const entry = MatrixEntry.fromServiceAndEnv(service, env, tag, counter);
       matrix.include.push(entry);
+      counter++;
     }
   }
 

@@ -30171,6 +30171,63 @@ const { glob } = __nccwpck_require__(1363);
 const { getSkyhookConfigPath } = __nccwpck_require__(7771);
 
 /**
+ * Convert camelCase to snake_case
+ * @param {string} str - camelCase string
+ * @returns {string} - snake_case string
+ */
+function camelToSnake(str) {
+  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+/**
+ * Normalize object keys from camelCase to snake_case
+ * @param {Object} obj - Object with camelCase keys
+ * @returns {Object} - Object with snake_case keys
+ */
+function normalizeKeys(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    return obj;
+  }
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const snakeKey = camelToSnake(key);
+    normalized[snakeKey] = value;
+  }
+  return normalized;
+}
+
+/**
+ * Normalize a service object - converts camelCase to snake_case
+ * @param {Object} service - Service configuration object
+ * @returns {Object} - Normalized service object
+ */
+function normalizeService(service) {
+  const normalized = normalizeKeys(service);
+
+  // Map deploymentRepo to repo for compatibility
+  if (normalized.deployment_repo && !normalized.repo) {
+    normalized.repo = normalized.deployment_repo;
+  }
+
+  // Map deploymentRepoPath to deployment_folder_path
+  if (normalized.deployment_repo_path && !normalized.deployment_folder_path) {
+    normalized.deployment_folder_path = normalized.deployment_repo_path;
+  }
+
+  return normalized;
+}
+
+/**
+ * Normalize an environment object - converts camelCase to snake_case
+ * @param {Object} env - Environment configuration object
+ * @returns {Object} - Normalized environment object
+ */
+function normalizeEnvironment(env) {
+  return normalizeKeys(env);
+}
+
+/**
  * Parse a skyhook.yaml configuration file
  * @param {string} filePath - Path to skyhook.yaml
  * @returns {Object} - Parsed configuration object
@@ -30321,19 +30378,23 @@ async function parseSkyhookConfig(repoPath, options = {}) {
     throw new Error(`Invalid skyhook.yaml:\n${validation.errors.join('\n')}`);
   }
 
-  const services = config.services || [];
-  let environments = [];
+  const rawServices = config.services || [];
+  let rawEnvironments = [];
 
   // Check for self-contained environments first
   if (config.environments && config.environments.length > 0) {
-    environments = config.environments;
+    rawEnvironments = config.environments;
   }
   // Then check for external infra repo environments
   else if (options.infraRepoPath) {
     const envPath = options.environmentsPath || 'skyhook/environments';
     const envDir = path.join(options.infraRepoPath, envPath);
-    environments = await parseEnvironmentFiles(envDir);
+    rawEnvironments = await parseEnvironmentFiles(envDir);
   }
+
+  // Normalize field names from camelCase to snake_case
+  const services = rawServices.map(normalizeService);
+  const environments = rawEnvironments.map(normalizeEnvironment);
 
   // Validate each environment
   environments.forEach((env, index) => {
@@ -30358,7 +30419,9 @@ module.exports = {
 /***/ }),
 
 /***/ 6104:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const { MatrixEntry } = __nccwpck_require__(9391);
 
 /**
  * Build a GitHub Actions deployment matrix from services and environments
@@ -30368,7 +30431,7 @@ module.exports = {
  * @param {string} options.tag - Image tag to inject
  * @param {string} options.envFilter - Environment filter (optional)
  * @param {string} options.deployToolFilter - Deploy tool filter: 'kubectl', 'argocd', or 'all' (optional)
- * @returns {Object} - GitHub Actions matrix object { include: Array }
+ * @returns {Object} - GitHub Actions matrix object { include: Array<MatrixEntry> }
  */
 function buildMatrix(services, environments, options = {}) {
   const { tag, envFilter, deployToolFilter = 'all' } = options;
@@ -30388,36 +30451,12 @@ function buildMatrix(services, environments, options = {}) {
   }
 
   // Build matrix entries for each service x environment combination
-  // Field names match Koala format for compatibility
+  let counter = 1;
   for (const service of services) {
     for (const env of filteredEnvs) {
-      const entry = {
-        // Core fields (matching Koala format exactly)
-        service_name: service.name,
-        service_dir: service.path,
-        service_tag: `${service.name}_${tag}`,  // Koala format: {service_name}_{tag}
-        overlay: env.name
-      };
-
-      // Service repo if present
-      if (service.repo) entry.service_repo = service.repo;
-
-      // Environment properties (matching Koala field names)
-      if (env.cluster_name) entry.cluster = env.cluster_name;
-      if (env.cloud_provider) entry.cloud_provider = env.cloud_provider;
-      if (env.location) entry.cluster_location = env.location;
-      if (env.namespace) entry.namespace = env.namespace;
-      if (env.account) entry.account = env.account;
-      if (env.deploy_tool) entry.deploy_tool = env.deploy_tool;
-
-      // Deployment repo info if present in environment
-      if (env.deployment_repo) entry.deployment_repo = env.deployment_repo;
-      if (env.deployment_folder_path) entry.deployment_folder_path = env.deployment_folder_path;
-
-      // Auto deploy flag
-      if (env.auto_deploy !== undefined) entry.auto_deploy = String(env.auto_deploy);
-
+      const entry = MatrixEntry.fromServiceAndEnv(service, env, tag, counter);
       matrix.include.push(entry);
+      counter++;
     }
   }
 
@@ -30512,6 +30551,119 @@ module.exports = {
   getMatrixStats,
   validateMatrixNotEmpty
 };
+
+
+/***/ }),
+
+/***/ 9391:
+/***/ ((module) => {
+
+/**
+ * Represents a single entry in the deployment matrix.
+ * Field names match Koala format for compatibility with existing workflows.
+ */
+class MatrixEntry {
+  /**
+   * @param {Object} params - Entry parameters
+   * @param {string} params.serviceName - Service name
+   * @param {string} params.serviceDir - Service directory path
+   * @param {string} params.serviceTag - Service tag in format {service_name}_{tag}_{counter}
+   * @param {string} params.overlay - Environment/overlay name
+   * @param {string} [params.serviceRepo] - Service repository (optional)
+   * @param {string} [params.deploymentRepo] - Deployment repository (optional)
+   * @param {string} [params.deploymentFolderPath] - Deployment folder path (optional)
+   * @param {string} [params.cluster] - Cluster name (optional)
+   * @param {string} [params.cloudProvider] - Cloud provider (optional)
+   * @param {string} [params.clusterLocation] - Cluster location (optional)
+   * @param {string} [params.namespace] - Kubernetes namespace (optional)
+   * @param {string} [params.account] - Cloud account (optional)
+   * @param {string} [params.deployTool] - Deploy tool: kubectl or argocd (optional)
+   * @param {string} [params.autoDeploy] - Auto deploy flag as string (optional)
+   */
+  constructor(params) {
+    // Required fields
+    this.service_name = params.serviceName;
+    this.service_dir = params.serviceDir;
+    this.service_tag = params.serviceTag;
+    this.overlay = params.overlay;
+
+    // Optional service fields
+    if (params.serviceRepo) this.service_repo = params.serviceRepo;
+    if (params.deploymentRepo) this.deployment_repo = params.deploymentRepo;
+    if (params.deploymentFolderPath) this.deployment_folder_path = params.deploymentFolderPath;
+
+    // Optional environment fields
+    if (params.cluster) this.cluster = params.cluster;
+    if (params.cloudProvider) this.cloud_provider = params.cloudProvider;
+    if (params.clusterLocation) this.cluster_location = params.clusterLocation;
+    if (params.namespace) this.namespace = params.namespace;
+    if (params.account) this.account = params.account;
+    if (params.deployTool) this.deploy_tool = params.deployTool;
+    if (params.autoDeploy !== undefined) this.auto_deploy = params.autoDeploy;
+  }
+
+  /**
+   * Create a MatrixEntry from service and environment configurations
+   * @param {Object} service - Service configuration (normalized)
+   * @param {Object} env - Environment configuration (normalized)
+   * @param {string} tag - Image tag
+   * @param {number} counter - Entry counter for unique tag generation
+   * @returns {MatrixEntry}
+   */
+  static fromServiceAndEnv(service, env, tag, counter) {
+    const counterStr = String(counter).padStart(2, '0');
+
+    return new MatrixEntry({
+      // Core fields
+      serviceName: service.name,
+      serviceDir: service.path,
+      serviceTag: `${service.name}_${tag}_${counterStr}`,
+      overlay: env.name,
+
+      // Service fields
+      serviceRepo: service.repo,
+      deploymentRepo: service.deployment_repo || env.deployment_repo,
+      deploymentFolderPath: service.deployment_folder_path || env.deployment_folder_path,
+
+      // Environment fields
+      cluster: env.cluster_name,
+      cloudProvider: env.cloud_provider,
+      clusterLocation: env.location,
+      namespace: env.namespace,
+      account: env.account,
+      deployTool: env.deploy_tool,
+      autoDeploy: env.auto_deploy !== undefined ? String(env.auto_deploy) : undefined
+    });
+  }
+
+  /**
+   * Convert to plain object for JSON serialization
+   * @returns {Object}
+   */
+  toJSON() {
+    const obj = {
+      service_name: this.service_name,
+      service_dir: this.service_dir,
+      service_tag: this.service_tag,
+      overlay: this.overlay
+    };
+
+    if (this.service_repo) obj.service_repo = this.service_repo;
+    if (this.deployment_repo) obj.deployment_repo = this.deployment_repo;
+    if (this.deployment_folder_path) obj.deployment_folder_path = this.deployment_folder_path;
+    if (this.cluster) obj.cluster = this.cluster;
+    if (this.cloud_provider) obj.cloud_provider = this.cloud_provider;
+    if (this.cluster_location) obj.cluster_location = this.cluster_location;
+    if (this.namespace) obj.namespace = this.namespace;
+    if (this.account) obj.account = this.account;
+    if (this.deploy_tool) obj.deploy_tool = this.deploy_tool;
+    if (this.auto_deploy !== undefined) obj.auto_deploy = this.auto_deploy;
+
+    return obj;
+  }
+}
+
+module.exports = { MatrixEntry };
 
 
 /***/ }),

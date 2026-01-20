@@ -25,11 +25,12 @@ describe('matrix-builder', () => {
       expect(matrix.include).toHaveLength(6); // 2 services x 3 environments
     });
 
-    test('includes service_tag in Koala format (service_name_tag)', () => {
+    test('includes service_tag in Koala format (service_name_tag_counter)', () => {
       const matrix = buildMatrix(services, environments, { tag: 'v1.0.0' });
 
-      matrix.include.forEach(entry => {
-        expect(entry.service_tag).toBe(`${entry.service_name}_v1.0.0`);
+      matrix.include.forEach((entry, index) => {
+        const counter = String(index + 1).padStart(2, '0');
+        expect(entry.service_tag).toBe(`${entry.service_name}_v1.0.0_${counter}`);
       });
     });
 
@@ -40,7 +41,7 @@ describe('matrix-builder', () => {
       // Koala-compatible fields only (no legacy duplicates)
       expect(apiEntry.service_name).toBe('api');
       expect(apiEntry.service_dir).toBe('services/api');
-      expect(apiEntry.service_tag).toBe('api_v1.0.0');  // Koala format
+      expect(apiEntry.service_tag).toMatch(/^api_v1\.0\.0_\d{2}$/);  // Koala format with counter
       expect(apiEntry.overlay).toBeDefined();
 
       // Should NOT have legacy fields
