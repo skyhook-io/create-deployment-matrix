@@ -671,8 +671,8 @@ jobs:
           fi
 
           # Verify we have entries from both configs
-          SKYHOOK_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service == "skyhook-service")] | length')
-          KOALA_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service == "koala-service")] | length')
+          SKYHOOK_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service_name == "skyhook-service")] | length')
+          KOALA_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service_name == "koala-service")] | length')
 
           if [[ $SKYHOOK_COUNT -lt 1 ]]; then
             echo "Expected at least 1 entry from Skyhook config, got $SKYHOOK_COUNT"

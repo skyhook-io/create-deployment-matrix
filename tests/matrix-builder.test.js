@@ -25,11 +25,11 @@ describe('matrix-builder', () => {
       expect(matrix.include).toHaveLength(6); // 2 services x 3 environments
     });
 
-    test('includes tag in all entries', () => {
+    test('includes service_tag in all entries', () => {
       const matrix = buildMatrix(services, environments, { tag: 'v1.0.0' });
 
       matrix.include.forEach(entry => {
-        expect(entry.tag).toBe('v1.0.0');
+        expect(entry.service_tag).toBe('v1.0.0');
       });
     });
 
@@ -37,18 +37,17 @@ describe('matrix-builder', () => {
       const matrix = buildMatrix(services, environments, { tag: 'v1.0.0' });
       const apiEntry = matrix.include.find(e => e.service_name === 'api');
 
-      // Koala-compatible fields
+      // Koala-compatible fields only (no legacy duplicates)
       expect(apiEntry.service_name).toBe('api');
       expect(apiEntry.service_dir).toBe('services/api');
       expect(apiEntry.service_tag).toBe('v1.0.0');
       expect(apiEntry.overlay).toBeDefined();
-      expect(apiEntry.image).toBe('api');
 
-      // Legacy fields for backwards compatibility
-      expect(apiEntry.service).toBe('api');
-      expect(apiEntry.service_path).toBe('services/api');
-      expect(apiEntry.tag).toBe('v1.0.0');
-      expect(apiEntry.build_tool).toBe('npm');
+      // Should NOT have legacy fields
+      expect(apiEntry.service).toBeUndefined();
+      expect(apiEntry.service_path).toBeUndefined();
+      expect(apiEntry.tag).toBeUndefined();
+      expect(apiEntry.environment).toBeUndefined();
     });
 
     test('includes environment properties with Koala-compatible names', () => {
@@ -58,15 +57,14 @@ describe('matrix-builder', () => {
       const matrix = buildMatrix(services, envsWithLocation, { tag: 'v1.0.0' });
       const devEntry = matrix.include.find(e => e.overlay === 'dev');
 
-      // Koala-compatible field names
+      // Koala-compatible field names only
       expect(devEntry.cluster).toBe('dev-cluster');
       expect(devEntry.cluster_location).toBe('us-east-1');
       expect(devEntry.cloud_provider).toBe('aws');
 
-      // Legacy field names for backwards compatibility
-      expect(devEntry.cluster_name).toBe('dev-cluster');
-      expect(devEntry.location).toBe('us-east-1');
-      expect(devEntry.deploy_tool).toBe('kubectl');
+      // Should NOT have legacy field names
+      expect(devEntry.cluster_name).toBeUndefined();
+      expect(devEntry.location).toBeUndefined();
     });
 
     test('includes deployment repo fields when present', () => {
@@ -80,12 +78,22 @@ describe('matrix-builder', () => {
       expect(entry.deployment_folder_path).toBe('apps/api');
     });
 
+    test('includes auto_deploy as string when present', () => {
+      const envsWithAutoDeploy = [
+        { name: 'dev', cluster_name: 'dev-cluster', auto_deploy: true }
+      ];
+      const matrix = buildMatrix(services, envsWithAutoDeploy, { tag: 'v1.0.0' });
+      const entry = matrix.include[0];
+
+      expect(entry.auto_deploy).toBe('true');
+    });
+
     test('filters by environment when envFilter is provided', () => {
       const matrix = buildMatrix(services, environments, { tag: 'v1.0.0', envFilter: 'prod' });
 
       expect(matrix.include).toHaveLength(2); // 2 services x 1 environment
       matrix.include.forEach(entry => {
-        expect(entry.environment).toBe('prod');
+        expect(entry.overlay).toBe('prod');
       });
     });
 
@@ -117,7 +125,7 @@ describe('matrix-builder', () => {
 
       // Should include 'dev' because it has no deploy_tool specified
       expect(matrix.include).toHaveLength(2);
-      expect(matrix.include.every(e => e.environment === 'dev')).toBe(true);
+      expect(matrix.include.every(e => e.overlay === 'dev')).toBe(true);
     });
 
     test('returns empty matrix when filters match nothing', () => {
@@ -156,7 +164,7 @@ describe('matrix-builder', () => {
 
       expect(filtered.include).toHaveLength(2);
       filtered.include.forEach(entry => {
-        expect(entry.environment).toBe('dev');
+        expect(entry.overlay).toBe('dev');
       });
     });
 

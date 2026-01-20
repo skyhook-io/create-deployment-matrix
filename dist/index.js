@@ -30392,44 +30392,27 @@ function buildMatrix(services, environments, options = {}) {
   for (const service of services) {
     for (const env of filteredEnvs) {
       const entry = {
-        // Core fields (matching Koala format)
+        // Core fields (matching Koala format exactly)
         service_name: service.name,
         service_dir: service.path,
         service_tag: tag,
-        overlay: env.name,
-
-        // Also include legacy field names for backwards compatibility
-        service: service.name,
-        service_path: service.path,
-        tag: tag,
-        environment: env.name
+        overlay: env.name
       };
 
       // Environment properties (matching Koala field names)
-      if (env.cluster_name) {
-        entry.cluster = env.cluster_name;
-        entry.cluster_name = env.cluster_name; // backwards compat
-      }
+      if (env.cluster_name) entry.cluster = env.cluster_name;
       if (env.cloud_provider) entry.cloud_provider = env.cloud_provider;
-      if (env.location) {
-        entry.cluster_location = env.location;
-        entry.location = env.location; // backwards compat
-      }
+      if (env.location) entry.cluster_location = env.location;
       if (env.namespace) entry.namespace = env.namespace;
-      if (env.deploy_tool) entry.deploy_tool = env.deploy_tool;
       if (env.account) entry.account = env.account;
+      if (env.deploy_tool) entry.deploy_tool = env.deploy_tool;
 
       // Deployment repo info if present in environment
       if (env.deployment_repo) entry.deployment_repo = env.deployment_repo;
       if (env.deployment_folder_path) entry.deployment_folder_path = env.deployment_folder_path;
 
-      // Image field (service name is typically used as image name)
-      entry.image = service.image || service.name;
-
-      // Service build properties
-      if (service.buildTool) entry.build_tool = service.buildTool;
-      if (service.dockerfilePath) entry.dockerfile_path = service.dockerfilePath;
-      if (service.dockerfileContext) entry.dockerfile_context = service.dockerfileContext;
+      // Auto deploy flag
+      if (env.auto_deploy !== undefined) entry.auto_deploy = String(env.auto_deploy);
 
       matrix.include.push(entry);
     }
@@ -30450,7 +30433,7 @@ function filterByEnvironment(matrix, envFilter) {
   }
 
   return {
-    include: matrix.include.filter(entry => entry.environment === envFilter)
+    include: matrix.include.filter(entry => entry.overlay === envFilter)
   };
 }
 
@@ -30467,7 +30450,7 @@ function filterByDeployTool(matrix, deployToolFilter) {
 
   return {
     include: matrix.include.filter(entry =>
-      entry.deploy_tool === deployToolFilter || !entry.deploy_tool
+      entry.deploy_tool === deployToolFilter
     )
   };
 }
@@ -30482,9 +30465,8 @@ function getMatrixStats(matrix) {
   const environments = new Set();
 
   matrix.include.forEach(entry => {
-    // Support both new (service_name/overlay) and legacy (service/environment) field names
-    services.add(entry.service_name || entry.service);
-    environments.add(entry.overlay || entry.environment);
+    services.add(entry.service_name);
+    environments.add(entry.overlay);
   });
 
   return {
