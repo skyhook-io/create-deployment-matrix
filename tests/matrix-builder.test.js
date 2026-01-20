@@ -33,20 +33,51 @@ describe('matrix-builder', () => {
       });
     });
 
-    test('includes service properties in entries', () => {
+    test('includes Koala-compatible field names', () => {
       const matrix = buildMatrix(services, environments, { tag: 'v1.0.0' });
-      const apiEntry = matrix.include.find(e => e.service === 'api');
+      const apiEntry = matrix.include.find(e => e.service_name === 'api');
 
+      // Koala-compatible fields
+      expect(apiEntry.service_name).toBe('api');
+      expect(apiEntry.service_dir).toBe('services/api');
+      expect(apiEntry.service_tag).toBe('v1.0.0');
+      expect(apiEntry.overlay).toBeDefined();
+      expect(apiEntry.image).toBe('api');
+
+      // Legacy fields for backwards compatibility
+      expect(apiEntry.service).toBe('api');
       expect(apiEntry.service_path).toBe('services/api');
+      expect(apiEntry.tag).toBe('v1.0.0');
       expect(apiEntry.build_tool).toBe('npm');
     });
 
-    test('includes environment properties in entries', () => {
-      const matrix = buildMatrix(services, environments, { tag: 'v1.0.0' });
-      const devEntry = matrix.include.find(e => e.environment === 'dev');
+    test('includes environment properties with Koala-compatible names', () => {
+      const envsWithLocation = [
+        { name: 'dev', cluster_name: 'dev-cluster', location: 'us-east-1', cloud_provider: 'aws', deploy_tool: 'kubectl' }
+      ];
+      const matrix = buildMatrix(services, envsWithLocation, { tag: 'v1.0.0' });
+      const devEntry = matrix.include.find(e => e.overlay === 'dev');
 
+      // Koala-compatible field names
+      expect(devEntry.cluster).toBe('dev-cluster');
+      expect(devEntry.cluster_location).toBe('us-east-1');
+      expect(devEntry.cloud_provider).toBe('aws');
+
+      // Legacy field names for backwards compatibility
       expect(devEntry.cluster_name).toBe('dev-cluster');
+      expect(devEntry.location).toBe('us-east-1');
       expect(devEntry.deploy_tool).toBe('kubectl');
+    });
+
+    test('includes deployment repo fields when present', () => {
+      const envsWithDeployment = [
+        { name: 'dev', cluster_name: 'dev-cluster', deployment_repo: 'org/deploy-repo', deployment_folder_path: 'apps/api' }
+      ];
+      const matrix = buildMatrix(services, envsWithDeployment, { tag: 'v1.0.0' });
+      const entry = matrix.include[0];
+
+      expect(entry.deployment_repo).toBe('org/deploy-repo');
+      expect(entry.deployment_folder_path).toBe('apps/api');
     });
 
     test('filters by environment when envFilter is provided', () => {

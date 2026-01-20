@@ -346,14 +346,45 @@ jobs:
             exit 1
           fi
 
-          # Verify cluster_name is present
-          CLUSTER=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[0].cluster_name')
-          if [[ -z "$CLUSTER" || "$CLUSTER" == "null" ]]; then
-            echo "Expected cluster_name in matrix entry"
+          # Verify Koala-compatible field names are present
+          FIRST_ENTRY=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include[0]')
+          echo "First entry: $FIRST_ENTRY"
+
+          # Check Koala-compatible fields
+          SERVICE_NAME=$(echo "$FIRST_ENTRY" | jq -r '.service_name')
+          SERVICE_DIR=$(echo "$FIRST_ENTRY" | jq -r '.service_dir')
+          SERVICE_TAG=$(echo "$FIRST_ENTRY" | jq -r '.service_tag')
+          OVERLAY=$(echo "$FIRST_ENTRY" | jq -r '.overlay')
+          CLUSTER=$(echo "$FIRST_ENTRY" | jq -r '.cluster')
+          CLUSTER_LOCATION=$(echo "$FIRST_ENTRY" | jq -r '.cluster_location')
+          IMAGE=$(echo "$FIRST_ENTRY" | jq -r '.image')
+
+          if [[ -z "$SERVICE_NAME" || "$SERVICE_NAME" == "null" ]]; then
+            echo "Expected service_name in matrix entry"
             exit 1
           fi
 
-          echo "✅ Skyhook self-contained matrix generated correctly"
+          if [[ -z "$SERVICE_DIR" || "$SERVICE_DIR" == "null" ]]; then
+            echo "Expected service_dir in matrix entry"
+            exit 1
+          fi
+
+          if [[ "$SERVICE_TAG" != "v1.0.0" ]]; then
+            echo "Expected service_tag 'v1.0.0', got '$SERVICE_TAG'"
+            exit 1
+          fi
+
+          if [[ -z "$OVERLAY" || "$OVERLAY" == "null" ]]; then
+            echo "Expected overlay in matrix entry"
+            exit 1
+          fi
+
+          if [[ -z "$CLUSTER" || "$CLUSTER" == "null" ]]; then
+            echo "Expected cluster in matrix entry"
+            exit 1
+          fi
+
+          echo "✅ Skyhook matrix has Koala-compatible field names"
 
   test-skyhook-env-filter:
     runs-on: ubuntu-latest
