@@ -30205,11 +30205,6 @@ function normalizeKeys(obj) {
 function normalizeService(service) {
   const normalized = normalizeKeys(service);
 
-  // Map deploymentRepo to repo for compatibility
-  if (normalized.deployment_repo && !normalized.repo) {
-    normalized.repo = normalized.deployment_repo;
-  }
-
   // Map deploymentRepoPath to deployment_folder_path
   if (normalized.deployment_repo_path && !normalized.deployment_folder_path) {
     normalized.deployment_folder_path = normalized.deployment_repo_path;
