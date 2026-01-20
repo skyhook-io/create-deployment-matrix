@@ -25,11 +25,11 @@ describe('matrix-builder', () => {
       expect(matrix.include).toHaveLength(6); // 2 services x 3 environments
     });
 
-    test('includes service_tag in all entries', () => {
+    test('includes service_tag in Koala format (service_name_tag)', () => {
       const matrix = buildMatrix(services, environments, { tag: 'v1.0.0' });
 
       matrix.include.forEach(entry => {
-        expect(entry.service_tag).toBe('v1.0.0');
+        expect(entry.service_tag).toBe(`${entry.service_name}_v1.0.0`);
       });
     });
 
@@ -40,7 +40,7 @@ describe('matrix-builder', () => {
       // Koala-compatible fields only (no legacy duplicates)
       expect(apiEntry.service_name).toBe('api');
       expect(apiEntry.service_dir).toBe('services/api');
-      expect(apiEntry.service_tag).toBe('v1.0.0');
+      expect(apiEntry.service_tag).toBe('api_v1.0.0');  // Koala format
       expect(apiEntry.overlay).toBeDefined();
 
       // Should NOT have legacy fields
@@ -48,6 +48,16 @@ describe('matrix-builder', () => {
       expect(apiEntry.service_path).toBeUndefined();
       expect(apiEntry.tag).toBeUndefined();
       expect(apiEntry.environment).toBeUndefined();
+    });
+
+    test('includes service_repo when present', () => {
+      const servicesWithRepo = [
+        { name: 'api', path: 'services/api', repo: 'org/api-repo' }
+      ];
+      const matrix = buildMatrix(servicesWithRepo, environments, { tag: 'v1.0.0' });
+      const entry = matrix.include[0];
+
+      expect(entry.service_repo).toBe('org/api-repo');
     });
 
     test('includes environment properties with Koala-compatible names', () => {

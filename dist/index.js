@@ -30395,9 +30395,12 @@ function buildMatrix(services, environments, options = {}) {
         // Core fields (matching Koala format exactly)
         service_name: service.name,
         service_dir: service.path,
-        service_tag: tag,
+        service_tag: `${service.name}_${tag}`,  // Koala format: {service_name}_{tag}
         overlay: env.name
       };
+
+      // Service repo if present
+      if (service.repo) entry.service_repo = service.repo;
 
       // Environment properties (matching Koala field names)
       if (env.cluster_name) entry.cluster = env.cluster_name;

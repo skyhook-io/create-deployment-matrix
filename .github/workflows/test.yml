@@ -369,8 +369,9 @@ jobs:
             exit 1
           fi
 
-          if [[ "$SERVICE_TAG" != "v1.0.0" ]]; then
-            echo "Expected service_tag 'v1.0.0', got '$SERVICE_TAG'"
+          # service_tag should be in format: {service_name}_{tag}
+          if [[ ! "$SERVICE_TAG" =~ _v1\.0\.0$ ]]; then
+            echo "Expected service_tag to end with '_v1.0.0', got '$SERVICE_TAG'"
             exit 1
           fi
 
