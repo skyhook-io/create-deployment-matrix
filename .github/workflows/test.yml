@@ -8,247 +8,171 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-basic-matrix:
+  unit-tests:
     runs-on: ubuntu-latest
-    name: Test basic matrix generation
+    name: Run unit tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create test monorepo structure
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  test-skyhook-config:
+    runs-on: ubuntu-latest
+    name: Test Skyhook configuration
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Skyhook config
         run: |
-          # Create .koala-monorepo.json
-          cat > .koala-monorepo.json << 'EOF'
-          {
-            "services": [
-              {
-                "name": "test-service-1",
-                "path": "services/service1"
-              },
-              {
-                "name": "test-service-2",
-                "path": "services/service2"
-              }
-            ]
-          }
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
+          services:
+            - name: vcs
+              path: apps/vcs
+              deploymentRepo: test-org/deployment
+              deploymentRepoPath: vcs
+            - name: api
+              path: apps/api
+              deploymentRepo: test-org/deployment
+              deploymentRepoPath: api
+
+          environments:
+            - name: dev
+              clusterName: dev-cluster
+              cloudProvider: gcp
+              account: test-account
+              location: us-east1-b
+              namespace: dev
+            - name: prod
+              clusterName: prod-cluster
+              cloudProvider: gcp
+              account: test-account
+              location: us-east1-b
+              namespace: prod
           EOF
 
-          # Create service directories and .koala.toml files
-          mkdir -p services/service1 services/service2
+          mkdir -p apps/vcs apps/api
+          echo "Skyhook config created"
 
-          cat > services/service1/.koala.toml << 'EOF'
-          [deployment]
-          environments = ["dev", "production"]
-
-          [deployment.dev]
-          replicas = 1
-
-          [deployment.production]
-          replicas = 3
-          EOF
-
-          cat > services/service2/.koala.toml << 'EOF'
-          [deployment]
-          environments = ["dev", "staging", "production"]
-
-          [deployment.dev]
-          replicas = 1
-
-          [deployment.staging]
-          replicas = 2
-
-          [deployment.production]
-          replicas = 5
-          EOF
-
-          echo "Test structure created"
-
-      - name: Test matrix generation (all environments)
-        id: matrix-all
+      - name: Test Skyhook matrix generation
+        id: matrix
         uses: ./
         with:
           tag: v1.0.0
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify matrix output
+      - name: Verify Skyhook matrix
         run: |
-          echo "Matrix output: ${{ steps.matrix-all.outputs.matrix-json }}"
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+          echo '${{ steps.matrix.outputs.matrix }}' | jq .
 
-          # Verify it's valid JSON
-          echo '${{ steps.matrix-all.outputs.matrix-json }}' | jq empty
-
-          # Check that we have entries
-          ENTRY_COUNT=$(echo '${{ steps.matrix-all.outputs.matrix-json }}' | jq '.include | length')
-          if [[ $ENTRY_COUNT -lt 1 ]]; then
-            echo "Expected at least 1 matrix entry, got $ENTRY_COUNT"
+          # Verify entry count (2 services x 2 environments = 4)
+          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
+          if [[ $ENTRY_COUNT -ne 4 ]]; then
+            echo "Expected 4 matrix entries, got $ENTRY_COUNT"
             exit 1
           fi
 
-          echo "✅ Matrix generated with $ENTRY_COUNT entries"
+          # Verify service names
+          VCS_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service_name == "vcs")] | length')
+          API_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '[.include[] | select(.service_name == "api")] | length')
+          if [[ $VCS_COUNT -ne 2 ]] || [[ $API_COUNT -ne 2 ]]; then
+            echo "Expected 2 entries each for vcs and api"
+            exit 1
+          fi
 
-  test-environment-filter:
+          # Verify per-service counter in service_tag
+          VCS_DEV_TAG=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[] | select(.service_name == "vcs" and .overlay == "dev") | .service_tag')
+          API_DEV_TAG=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[] | select(.service_name == "api" and .overlay == "dev") | .service_tag')
+
+          if [[ "$VCS_DEV_TAG" != "vcs_v1.0.0_01" ]]; then
+            echo "Expected vcs_v1.0.0_01, got $VCS_DEV_TAG"
+            exit 1
+          fi
+
+          if [[ "$API_DEV_TAG" != "api_v1.0.0_01" ]]; then
+            echo "Expected api_v1.0.0_01, got $API_DEV_TAG"
+            exit 1
+          fi
+
+          echo "✅ Skyhook configuration working correctly"
+
+  test-skyhook-env-filter:
     runs-on: ubuntu-latest
-    name: Test environment filtering
+    name: Test Skyhook with environment filter
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create test monorepo structure
+      - name: Create Skyhook config
         run: |
-          cat > .koala-monorepo.json << 'EOF'
-          {
-            "services": [
-              {
-                "name": "api-service",
-                "path": "services/api"
-              }
-            ]
-          }
+          mkdir -p .skyhook
+          cat > .skyhook/skyhook.yaml << 'EOF'
+          services:
+            - name: service1
+              path: apps/service1
+              deploymentRepo: test-org/deployment
+              deploymentRepoPath: service1
+
+          environments:
+            - name: dev
+              clusterName: dev-cluster
+              cloudProvider: gcp
+              account: test-account
+              location: us-east1
+              namespace: dev
+            - name: staging
+              clusterName: staging-cluster
+              cloudProvider: gcp
+              account: test-account
+              location: us-east1
+              namespace: staging
+            - name: prod
+              clusterName: prod-cluster
+              cloudProvider: gcp
+              account: test-account
+              location: us-east1
+              namespace: prod
           EOF
 
-          mkdir -p services/api
+          mkdir -p apps/service1
 
-          cat > services/api/.koala.toml << 'EOF'
-          [deployment]
-          environments = ["dev", "staging", "production"]
-
-          [deployment.dev]
-          replicas = 1
-
-          [deployment.staging]
-          replicas = 2
-
-          [deployment.production]
-          replicas = 5
-          EOF
-
-      - name: Test production filter
-        id: matrix-prod
+      - name: Test with dev filter
+        id: matrix
         uses: ./
         with:
-          overlay: production
+          overlay: dev
           tag: v2.0.0
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify production matrix
+      - name: Verify filtered matrix
         run: |
-          echo "Matrix: ${{ steps.matrix-prod.outputs.matrix-json }}"
-          echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq .
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
 
-          # Verify all entries are for production
-          PROD_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq '[.include[] | select(.environment == "production")] | length')
-          TOTAL_COUNT=$(echo '${{ steps.matrix-prod.outputs.matrix-json }}' | jq '.include | length')
-
-          if [[ $PROD_COUNT -ne $TOTAL_COUNT ]]; then
-            echo "Expected all entries to be production, got $PROD_COUNT out of $TOTAL_COUNT"
+          # Should only have 1 entry (1 service x 1 environment)
+          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix }}' | jq '.include | length')
+          if [[ $ENTRY_COUNT -ne 1 ]]; then
+            echo "Expected 1 entry with dev filter, got $ENTRY_COUNT"
             exit 1
           fi
 
-          echo "✅ Environment filter working correctly"
-
-  test-custom-path:
-    runs-on: ubuntu-latest
-    name: Test with custom repository path
-    steps:
-      - name: Checkout to custom path
-        uses: actions/checkout@v4
-        with:
-          path: custom-repo
-
-      - name: Create test structure in custom path
-        run: |
-          cd custom-repo
-
-          cat > .koala-monorepo.json << 'EOF'
-          {
-            "services": [
-              {
-                "name": "custom-service",
-                "path": "services/custom"
-              }
-            ]
-          }
-          EOF
-
-          mkdir -p services/custom
-
-          cat > services/custom/.koala.toml << 'EOF'
-          [deployment]
-          environments = ["dev"]
-
-          [deployment.dev]
-          replicas = 1
-          EOF
-
-      - name: Test with custom path
-        id: matrix
-        uses: ./
-        with:
-          repo-path: custom-repo
-          tag: v1.0.0
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify custom path matrix
-        run: |
-          echo "Matrix: ${{ steps.matrix.outputs.matrix-json }}"
-          echo '${{ steps.matrix.outputs.matrix-json }}' | jq .
-
-          # Verify we got results
-          ENTRY_COUNT=$(echo '${{ steps.matrix.outputs.matrix-json }}' | jq '.include | length')
-          if [[ $ENTRY_COUNT -lt 1 ]]; then
-            echo "Expected at least 1 entry for custom path"
+          # Verify it's dev environment
+          OVERLAY=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[0].overlay')
+          if [[ "$OVERLAY" != "dev" ]]; then
+            echo "Expected overlay 'dev', got $OVERLAY"
             exit 1
           fi
 
-          echo "✅ Custom path working correctly"
-
-  test-tag-injection:
-    runs-on: ubuntu-latest
-    name: Test tag is properly injected
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create test structure
-        run: |
-          cat > .koala-monorepo.json << 'EOF'
-          {
-            "services": [
-              {
-                "name": "tag-test-service",
-                "path": "services/test"
-              }
-            ]
-          }
-          EOF
-
-          mkdir -p services/test
-
-          cat > services/test/.koala.toml << 'EOF'
-          [deployment]
-          environments = ["dev"]
-
-          [deployment.dev]
-          replicas = 1
-          EOF
-
-      - name: Generate matrix with specific tag
-        id: matrix
-        uses: ./
-        with:
-          tag: v3.5.7
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify tag in matrix
-        run: |
-          echo '${{ steps.matrix.outputs.matrix-json }}' | jq .
-
-          # Check that tag is in the matrix
-          TAG_VALUE=$(echo '${{ steps.matrix.outputs.matrix-json }}' | jq -r '.include[0].tag')
-
-          if [[ "$TAG_VALUE" != "v3.5.7" ]]; then
-            echo "Expected tag v3.5.7, got $TAG_VALUE"
-            exit 1
-          fi
-
-          echo "✅ Tag properly injected into matrix"
+          echo "✅ Skyhook environment filter working correctly"
