@@ -109,6 +109,91 @@ jobs:
 
           echo "✅ Skyhook configuration working correctly"
 
+  test-skyhook-existing-tags:
+    runs-on: ubuntu-latest
+    name: Test Skyhook counter respects existing tags
+    steps:
+      - name: Checkout action source
+        uses: actions/checkout@v4
+        with:
+          path: action-src
+
+      - name: Setup test repo with existing tags
+        run: |
+          # Create a bare remote and working clone
+          git init --bare /tmp/test-remote.git
+          git clone /tmp/test-remote.git /tmp/test-repo
+          cd /tmp/test-repo
+          git config user.email "test@test.com"
+          git config user.name "Test"
+          git checkout -b main
+
+          # Create skyhook config with two services
+          mkdir -p .skyhook apps/svc-a apps/svc-b
+          cat > .skyhook/skyhook.yaml << 'YAML'
+          services:
+            - name: svc-a
+              path: apps/svc-a
+              deploymentRepo: test-org/deployment
+              deploymentRepoPath: svc-a
+            - name: svc-b
+              path: apps/svc-b
+              deploymentRepo: test-org/deployment
+              deploymentRepoPath: svc-b
+          environments:
+            - name: dev
+              clusterName: dev-cluster
+              cloudProvider: gcp
+              account: test-account
+              location: us-east1
+              namespace: dev
+          YAML
+
+          git add -A && git commit -m "init" && git push -u origin main
+
+          # Simulate previous runs: svc-a built twice, svc-b built once
+          git tag "svc-a_v1.0.0_01" && git tag "svc-a_v1.0.0_02"
+          git tag "svc-b_v1.0.0_01"
+          git push origin --tags
+
+      - name: Run matrix generation
+        id: matrix
+        uses: ./action-src
+        with:
+          overlay: dev
+          tag: v1.0.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repo-path: /tmp/test-repo
+
+      - name: Verify counters increment past existing tags
+        run: |
+          echo "Matrix: ${{ steps.matrix.outputs.matrix }}"
+
+          SVC_A_TAG=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[] | select(.service_name == "svc-a") | .service_tag')
+          SVC_B_TAG=$(echo '${{ steps.matrix.outputs.matrix }}' | jq -r '.include[] | select(.service_name == "svc-b") | .service_tag')
+
+          echo "svc-a tag: $SVC_A_TAG"
+          echo "svc-b tag: $SVC_B_TAG"
+
+          FAIL=0
+          # svc-a had _01 and _02, next should be _03
+          if [[ "$SVC_A_TAG" != "svc-a_v1.0.0_03" ]]; then
+            echo "❌ svc-a: expected svc-a_v1.0.0_03, got $SVC_A_TAG"
+            ((FAIL++))
+          else
+            echo "✅ svc-a correctly incremented to _03"
+          fi
+
+          # svc-b had _01, next should be _02
+          if [[ "$SVC_B_TAG" != "svc-b_v1.0.0_02" ]]; then
+            echo "❌ svc-b: expected svc-b_v1.0.0_02, got $SVC_B_TAG"
+            ((FAIL++))
+          else
+            echo "✅ svc-b correctly incremented to _02"
+          fi
+
+          [ "$FAIL" -eq 0 ] || exit 1
+
   test-skyhook-env-filter:
     runs-on: ubuntu-latest
     name: Test Skyhook with environment filter
