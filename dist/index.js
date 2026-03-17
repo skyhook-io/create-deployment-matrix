@@ -32462,16 +32462,18 @@ async function getExistingTagCounters(services, tag, repoPath) {
   const counters = new Map();
 
   let stdout = '';
+  let stderr = '';
   try {
     await exec.exec('git', ['ls-remote', '--tags', 'origin'], {
       cwd: repoPath,
       listeners: {
-        stdout: (data) => { stdout += data.toString(); }
+        stdout: (data) => { stdout += data.toString(); },
+        stderr: (data) => { stderr += data.toString(); }
       },
       silent: true
     });
   } catch (err) {
-    core.warning(`Cannot access remote tags for counter detection: ${err.message}`);
+    core.warning(`Cannot access remote tags for counter detection: ${err.message}${stderr ? '\n' + stderr.trim() : ''}`);
     return counters;
   }
 
