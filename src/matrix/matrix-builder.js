@@ -2,6 +2,26 @@ const core = require('@actions/core');
 const { DeploymentMatrix, DeploymentEntry } = require('../DeploymentMatrix');
 
 /**
+ * Resolve the full image URL for a service+environment combination.
+ * Resolution order (highest to lowest precedence):
+ *   1. service.image  — explicit per-service full URL override
+ *   2. env.registry/serviceName — per-environment registry
+ *   3. rootRegistry/serviceName — repo-level registry
+ *
+ * @param {string} serviceName
+ * @param {Object} service - Service config (may have .image)
+ * @param {Object} env - Environment config (may have .registry)
+ * @param {string} rootRegistry - Repo-level registry from skyhook.yaml root
+ * @returns {string} Full image URL without tag, or '' if unresolvable
+ */
+function resolveImage(serviceName, service, env, rootRegistry) {
+  if (service.image) return service.image;
+  if (env.registry) return `${env.registry}/${serviceName}`;
+  if (rootRegistry) return `${rootRegistry}/${serviceName}`;
+  return '';
+}
+
+/**
  * Build a DeploymentMatrix from Skyhook services and environments
  * @param {Array} services - Array of service configurations from skyhook.yaml
  * @param {Array} environments - Array of environment configurations from skyhook.yaml
@@ -10,10 +30,11 @@ const { DeploymentMatrix, DeploymentEntry } = require('../DeploymentMatrix');
  * @param {string} options.serviceRepo - Source repository (e.g., "KoalaOps/orbit")
  * @param {string} [options.envFilter] - Environment filter (optional)
  * @param {Map<string, number>} [options.serviceCounters] - Per-service counters from Koala
+ * @param {string} [options.rootRegistry] - Repo-level registry prefix from skyhook.yaml
  * @returns {DeploymentMatrix}
  */
 function buildMatrixFromSkyhook(services, environments, options = {}) {
-  const { tag, serviceRepo, envFilter, serviceCounters = new Map() } = options;
+  const { tag, serviceRepo, envFilter, serviceCounters = new Map(), rootRegistry = '' } = options;
   const matrix = new DeploymentMatrix();
 
   // Clone the counters map so we can modify it
@@ -42,8 +63,9 @@ function buildMatrixFromSkyhook(services, environments, options = {}) {
       const nextCounter = currentCounter + 1;
       counters.set(service.name, nextCounter);
 
+      const image = resolveImage(service.name, service, env, rootRegistry);
       core.info(`\n🔧 Creating entry for ${service.name} (counter: ${nextCounter}):`);
-      const entry = createDeploymentEntry(service, env, tag, serviceRepo, nextCounter);
+      const entry = createDeploymentEntry(service, env, tag, serviceRepo, nextCounter, image);
       matrix.addEntry(entry);
     }
   }
@@ -58,9 +80,10 @@ function buildMatrixFromSkyhook(services, environments, options = {}) {
  * @param {string} tag - Image tag
  * @param {string} serviceRepo - Source repository
  * @param {number} counter - Counter for unique service tag (per-service)
+ * @param {string} image - Resolved full image URL without tag
  * @returns {DeploymentEntry}
  */
-function createDeploymentEntry(service, env, tag, serviceRepo, counter) {
+function createDeploymentEntry(service, env, tag, serviceRepo, counter, image) {
   const counterStr = String(counter).padStart(2, '0');
   const serviceTag = `${service.name}_${tag}_${counterStr}`;
 
@@ -78,6 +101,7 @@ function createDeploymentEntry(service, env, tag, serviceRepo, counter) {
   core.info(`   account: "${env.account || ''}" (from skyhook.yaml environments[].account)`);
   core.info(`   auto_deploy: "true" (default value)`);
   core.info(`   service_tag: "${serviceTag}" (computed: {service_name}_{tag}_{counter})`);
+  core.info(`   image: "${image}" (resolved from registry hierarchy)`);
 
   return new DeploymentEntry({
     service_name: service.name,
@@ -92,7 +116,8 @@ function createDeploymentEntry(service, env, tag, serviceRepo, counter) {
     namespace: env.namespace,
     account: env.account,
     auto_deploy: 'true',
-    service_tag: serviceTag
+    service_tag: serviceTag,
+    image
   });
 }
 
@@ -118,5 +143,6 @@ function mergeMatrices(matrix1, matrix2) {
 module.exports = {
   buildMatrixFromSkyhook,
   createDeploymentEntry,
-  mergeMatrices
+  mergeMatrices,
+  resolveImage
 };

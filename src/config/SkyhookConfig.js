@@ -6,10 +6,12 @@ class SkyhookConfig {
 
   /**
    * @param {Object} params
+   * @param {string} [params.registry] - Repo-level container registry prefix
    * @param {SkyhookService[]} params.services - Array of service configurations
    * @param {SkyhookEnvironment[]} params.environments - Array of environment configurations
    */
-  constructor({ services = [], environments = [] }) {
+  constructor({ registry = '', services = [], environments = [] }) {
+    this.registry = registry;
     this.services = services.map(s => new SkyhookService(s));
     this.environments = environments.map(e => new SkyhookEnvironment(e));
   }
@@ -21,10 +23,12 @@ class SkyhookConfig {
    */
   static fromObject(obj) {
     return new SkyhookConfig({
+      registry: obj.registry || '',
       services: obj.services || [],
       environments: obj.environments || []
     });
   }
+
 }
 
 /**
@@ -39,12 +43,13 @@ class SkyhookService {
    * @param {string} [params.deploymentRepoPath] - Path within deployment repo
    * @param {Object} [params.buildTool] - Build tool configuration
    */
-  constructor({ name, path, deploymentRepo, deploymentRepoPath, buildTool }) {
+  constructor({ name, path, deploymentRepo, deploymentRepoPath, buildTool, image }) {
     this.name = name;
     this.path = path;
     this.deploymentRepo = deploymentRepo;
     this.deploymentRepoPath = deploymentRepoPath;
     this.buildTool = buildTool;
+    this.image = image || '';
   }
 }
 
@@ -61,13 +66,14 @@ class SkyhookEnvironment {
    * @param {string} [params.location] - Cluster location/zone
    * @param {string} [params.namespace] - Kubernetes namespace
    */
-  constructor({ name, clusterName, cloudProvider, account, location, namespace }) {
+  constructor({ name, clusterName, cloudProvider, account, location, namespace, registry }) {
     this.name = name;
     this.clusterName = clusterName;
     this.cloudProvider = cloudProvider;
     this.account = account;
     this.location = location;
     this.namespace = namespace;
+    this.registry = registry || '';
   }
 }
 
