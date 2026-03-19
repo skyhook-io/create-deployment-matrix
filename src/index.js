@@ -199,7 +199,8 @@ async function processSkyhookConfig(skyhookPath, tag, overlay, repoPath, service
     tag,
     serviceRepo,
     envFilter: overlay,
-    serviceCounters: mergedCounters
+    serviceCounters: mergedCounters,
+    rootRegistry: config.registry
   });
 
   return matrix;

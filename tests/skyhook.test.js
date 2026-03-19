@@ -1,7 +1,7 @@
 const { SkyhookConfig, SkyhookService, SkyhookEnvironment } = require('../src/config/SkyhookConfig');
 const { parseSkyhookConfig, validateSkyhookConfig } = require('../src/config/skyhook-parser');
 const { detectConfigFormats } = require('../src/config/config-detector');
-const { buildMatrixFromSkyhook } = require('../src/matrix/matrix-builder');
+const { buildMatrixFromSkyhook, resolveImage } = require('../src/matrix/matrix-builder');
 const { DeploymentMatrix, DeploymentEntry } = require('../src/DeploymentMatrix');
 const fs = require('fs');
 const path = require('path');
@@ -180,6 +180,93 @@ describe('buildMatrixFromSkyhook', () => {
     expect(entry.auto_deploy).toBe('true');
   });
 });
+
+describe('resolveImage', () => {
+  const service = (name, image = '') => ({ name, image });
+  const env = (name, registry = '') => ({ name, registry });
+
+  test('service.image takes highest precedence', () => {
+    expect(resolveImage('vcs', service('vcs', 'ghcr.io/org/vcs'), env('dev', 'env-reg/repo'), 'root-reg/repo'))
+      .toBe('ghcr.io/org/vcs');
+  });
+
+  test('env.registry is second priority', () => {
+    expect(resolveImage('vcs', service('vcs'), env('dev', 'env-reg/repo'), 'root-reg/repo'))
+      .toBe('env-reg/repo/vcs');
+  });
+
+  test('root registry is fallback', () => {
+    expect(resolveImage('vcs', service('vcs'), env('dev'), 'us-east1-docker.pkg.dev/koalabackend/koala-repo'))
+      .toBe('us-east1-docker.pkg.dev/koalabackend/koala-repo/vcs');
+  });
+
+  test('returns empty string when no registry available', () => {
+    expect(resolveImage('vcs', service('vcs'), env('dev'), ''))
+      .toBe('');
+  });
+});
+
+describe('buildMatrixFromSkyhook with registry', () => {
+  const services = [
+    { name: 'vcs', path: 'apps/vcs', deploymentRepo: 'KoalaOps/deployment', deploymentRepoPath: 'vcs', image: '' },
+    { name: 'special', path: 'apps/special', deploymentRepo: 'KoalaOps/deployment', deploymentRepoPath: 'special', image: 'ghcr.io/org/special' }
+  ];
+
+  const environments = [
+    { name: 'dev', clusterName: 'nonprod-cluster', cloudProvider: 'gcp', location: 'us-east1-b', namespace: 'dev', account: 'koalabackend', registry: '' },
+    { name: 'prod', clusterName: 'prod-cluster', cloudProvider: 'gcp', location: 'us-east1-b', namespace: 'prod', account: 'koalabackend', registry: 'prod-reg/repo' }
+  ];
+
+  test('populates image from root registry for services without override', () => {
+    const matrix = buildMatrixFromSkyhook(services, environments, {
+      tag: 'v1.0.0',
+      serviceRepo: 'KoalaOps/orbit',
+      envFilter: 'dev',
+      rootRegistry: 'us-east1-docker.pkg.dev/koalabackend/koala-repo'
+    });
+
+    const vcsEntry = matrix.include.find(e => e.service_name === 'vcs');
+    expect(vcsEntry.image).toBe('us-east1-docker.pkg.dev/koalabackend/koala-repo/vcs');
+  });
+
+  test('service.image overrides root registry', () => {
+    const matrix = buildMatrixFromSkyhook(services, environments, {
+      tag: 'v1.0.0',
+      serviceRepo: 'KoalaOps/orbit',
+      envFilter: 'dev',
+      rootRegistry: 'us-east1-docker.pkg.dev/koalabackend/koala-repo'
+    });
+
+    const specialEntry = matrix.include.find(e => e.service_name === 'special');
+    expect(specialEntry.image).toBe('ghcr.io/org/special');
+  });
+
+  test('env.registry overrides root registry', () => {
+    const matrix = buildMatrixFromSkyhook(services, environments, {
+      tag: 'v1.0.0',
+      serviceRepo: 'KoalaOps/orbit',
+      envFilter: 'prod',
+      rootRegistry: 'us-east1-docker.pkg.dev/koalabackend/koala-repo'
+    });
+
+    const vcsEntry = matrix.include.find(e => e.service_name === 'vcs');
+    expect(vcsEntry.image).toBe('prod-reg/repo/vcs');
+  });
+
+  test('image is included in toObject() output', () => {
+    const matrix = buildMatrixFromSkyhook(services, environments, {
+      tag: 'v1.0.0',
+      serviceRepo: 'KoalaOps/orbit',
+      envFilter: 'dev',
+      rootRegistry: 'us-east1-docker.pkg.dev/koalabackend/koala-repo'
+    });
+
+    const obj = matrix.toObject();
+    const vcsEntry = obj.include.find(e => e.service_name === 'vcs');
+    expect(vcsEntry.image).toBe('us-east1-docker.pkg.dev/koalabackend/koala-repo/vcs');
+  });
+});
+
 
 describe('DeploymentMatrix.merge', () => {
   test('merges two matrices and deduplicates by service_name + overlay', () => {

@@ -17,6 +17,7 @@ class DeploymentEntry {
    * @param {string} params.service_tag - Service image tag
    * @param {string} [params.namespace] - Kubernetes namespace
    * @param {string} [params.account] - Cloud account identifier
+   * @param {string} [params.image] - Full container image URL without tag (e.g. "us-east1-docker.pkg.dev/project/repo/service")
    */
   constructor({
     service_dir,
@@ -31,7 +32,8 @@ class DeploymentEntry {
     deployment_folder_path,
     service_tag,
     namespace,
-    account
+    account,
+    image
   }) {
     this.service_dir = service_dir;
     this.service_name = service_name;
@@ -46,6 +48,7 @@ class DeploymentEntry {
     this.service_tag = service_tag;
     this.namespace = namespace;
     this.account = account;
+    this.image = image || '';
   }
 
   /**
@@ -77,6 +80,7 @@ class DeploymentEntry {
     };
     if (this.namespace) obj.namespace = this.namespace;
     if (this.account) obj.account = this.account;
+    if (this.image) obj.image = this.image;
     return obj;
   }
 }
