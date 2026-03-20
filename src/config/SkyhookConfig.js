@@ -61,13 +61,14 @@ class SkyhookEnvironment {
    * @param {string} [params.location] - Cluster location/zone
    * @param {string} [params.namespace] - Kubernetes namespace
    */
-  constructor({ name, clusterName, cloudProvider, account, location, namespace }) {
+  constructor({ name, clusterName, cloudProvider, account, location, namespace, autoDeploy }) {
     this.name = name;
     this.clusterName = clusterName;
     this.cloudProvider = cloudProvider;
     this.account = account;
     this.location = location;
     this.namespace = namespace;
+    this.autoDeploy = autoDeploy === true || autoDeploy === 'true';
   }
 }
 

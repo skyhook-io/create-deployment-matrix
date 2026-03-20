@@ -189,7 +189,7 @@ describe('buildMatrixFromSkyhook', () => {
     expect(entry.cloud_provider).toBe('gcp');
     expect(entry.namespace).toBe('dev');
     expect(entry.account).toBe('koalabackend');
-    expect(entry.auto_deploy).toBe('true');
+    expect(entry.auto_deploy).toBe('false');
   });
 });
 

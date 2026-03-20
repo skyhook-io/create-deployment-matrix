@@ -118,7 +118,8 @@ function readEnvironmentConfig(clonedRepoPath, repoFullName, branch, envName, en
     cloudProvider: parsed.cloudProvider,
     account: parsed.account,
     location: parsed.location,
-    namespace: parsed.namespace
+    namespace: parsed.namespace,
+    autoDeploy: parsed.autoDeploy
   });
 
   envConfigCache.set(cacheKey, env);

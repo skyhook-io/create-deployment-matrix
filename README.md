@@ -72,6 +72,7 @@ cloudProvider: gcp
 account: my-project-id
 location: us-central1
 namespace: default
+autoDeploy: true
 ```
 
 The environment `name` comes from the filename, not from inside the file. If an environment YAML file is missing, the overlay is still included with only its name populated.
@@ -162,7 +163,7 @@ The Koala format uses `.koala-monorepo.json` at the repository root to list serv
       "cloud_provider": "gcp",
       "namespace": "dev",
       "account": "my-project-nonprod",
-      "auto_deploy": "true"
+      "auto_deploy": "false"
     }
   ]
 }
@@ -182,7 +183,7 @@ The Koala format uses `.koala-monorepo.json` at the repository root to list serv
 | `cloud_provider` | `environments[].cloudProvider` |
 | `namespace` | `environments[].namespace` |
 | `account` | `environments[].account` |
-| `auto_deploy` | Always `"true"` |
+| `auto_deploy` | `environments[].autoDeploy` (default `false`) |
 
 ## Service Tag Counters
 
