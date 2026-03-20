@@ -4,16 +4,17 @@ const { DeploymentMatrix, DeploymentEntry } = require('../DeploymentMatrix');
 /**
  * Build a DeploymentMatrix from Skyhook services and environments
  * @param {Array} services - Array of service configurations from skyhook.yaml
- * @param {Array} environments - Array of environment configurations from skyhook.yaml
+ * @param {Array} environments - Array of environment configurations from skyhook.yaml (used for services without deploymentRepo)
  * @param {Object} options - Build options
  * @param {string} options.tag - Image tag to inject
  * @param {string} options.serviceRepo - Source repository (e.g., "KoalaOps/orbit")
  * @param {string} [options.envFilter] - Environment filter (optional)
  * @param {Map<string, number>} [options.serviceCounters] - Per-service counters from Koala
+ * @param {Map<string, Array>} [options.perServiceEnvs] - Per-service environments from deployment repos
  * @returns {DeploymentMatrix}
  */
 function buildMatrixFromSkyhook(services, environments, options = {}) {
-  const { tag, serviceRepo, envFilter, serviceCounters = new Map() } = options;
+  const { tag, serviceRepo, envFilter, serviceCounters = new Map(), perServiceEnvs = new Map() } = options;
   const matrix = new DeploymentMatrix();
 
   // Clone the counters map so we can modify it
@@ -24,19 +25,21 @@ function buildMatrixFromSkyhook(services, environments, options = {}) {
   core.info(`   - Service repo (from GITHUB_REPOSITORY): ${serviceRepo}`);
   core.info(`   - Existing service counters: ${JSON.stringify(Object.fromEntries(counters))}`);
 
-  // Apply environment filter if provided
-  let filteredEnvs = environments;
-  if (envFilter) {
-    core.info(`   - Environment filter: ${envFilter}`);
-    filteredEnvs = environments.filter(env => env.name === envFilter);
-  }
-
   core.info(`   - Services count: ${services.length}`);
-  core.info(`   - Environments count: ${filteredEnvs.length}`);
 
   // Build matrix entries for each service x environment combination
   for (const service of services) {
-    for (const env of filteredEnvs) {
+    // Use per-service environments if available (from deployment repo), otherwise fall back to global
+    let serviceEnvs = perServiceEnvs.has(service.name) ? perServiceEnvs.get(service.name) : environments;
+
+    // Apply environment filter if provided
+    if (envFilter) {
+      serviceEnvs = serviceEnvs.filter(env => env.name === envFilter);
+    }
+
+    core.info(`   - ${service.name}: ${serviceEnvs.length} environments${perServiceEnvs.has(service.name) ? ' (from deployment repo)' : ' (from local config)'}`);
+
+    for (const env of serviceEnvs) {
       // Get next counter for this service (per-service counter)
       const currentCounter = counters.get(service.name) || 0;
       const nextCounter = currentCounter + 1;
