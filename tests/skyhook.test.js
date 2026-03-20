@@ -59,6 +59,28 @@ describe('SkyhookConfig', () => {
     expect(config.services[0]).toBeInstanceOf(SkyhookService);
     expect(config.environments[0]).toBeInstanceOf(SkyhookEnvironment);
   });
+
+  describe('SkyhookEnvironment.autoDeploy', () => {
+    test('defaults to false when not specified', () => {
+      const env = new SkyhookEnvironment({ name: 'dev' });
+      expect(env.autoDeploy).toBe(false);
+    });
+
+    test('accepts boolean true', () => {
+      const env = new SkyhookEnvironment({ name: 'dev', autoDeploy: true });
+      expect(env.autoDeploy).toBe(true);
+    });
+
+    test('accepts string "true"', () => {
+      const env = new SkyhookEnvironment({ name: 'dev', autoDeploy: 'true' });
+      expect(env.autoDeploy).toBe(true);
+    });
+
+    test('false when explicitly false', () => {
+      const env = new SkyhookEnvironment({ name: 'dev', autoDeploy: false });
+      expect(env.autoDeploy).toBe(false);
+    });
+  });
 });
 
 describe('validateSkyhookConfig', () => {
@@ -190,6 +212,24 @@ describe('buildMatrixFromSkyhook', () => {
     expect(entry.namespace).toBe('dev');
     expect(entry.account).toBe('koalabackend');
     expect(entry.auto_deploy).toBe('false');
+  });
+
+  test('auto_deploy reflects environment autoDeploy setting', () => {
+    const envsWithAutoDeploy = [
+      { name: 'dev', clusterName: 'c1', autoDeploy: true },
+      { name: 'prod', clusterName: 'c2', autoDeploy: false }
+    ];
+
+    const matrix = buildMatrixFromSkyhook(
+      [{ name: 'svc', path: 'apps/svc' }],
+      envsWithAutoDeploy,
+      { tag: 'v1.0.0', serviceRepo: 'org/repo' }
+    );
+
+    const devEntry = matrix.include.find(e => e.overlay === 'dev');
+    const prodEntry = matrix.include.find(e => e.overlay === 'prod');
+    expect(devEntry.auto_deploy).toBe('true');
+    expect(prodEntry.auto_deploy).toBe('false');
   });
 });
 
@@ -573,6 +613,30 @@ describe('repo-fetcher', () => {
 
       expect(env.name).toBe('missing');
       expect(env.clusterName).toBeUndefined();
+      expect(env.autoDeploy).toBe(false);
+    });
+
+    test('reads autoDeploy true from environment yaml', () => {
+      const envDir = path.join(tmpDir, 'skyhook', 'environments');
+      fs.mkdirSync(envDir, { recursive: true });
+      fs.writeFileSync(path.join(envDir, 'prod.yaml'), [
+        'clusterName: prod-cluster',
+        'autoDeploy: true'
+      ].join('\n'));
+
+      const cache = new Map();
+      const env = readEnvironmentConfig(tmpDir, 'org/repo', 'main', 'prod', cache);
+      expect(env.autoDeploy).toBe(true);
+    });
+
+    test('autoDeploy defaults to false when not in remote yaml', () => {
+      const envDir = path.join(tmpDir, 'skyhook', 'environments');
+      fs.mkdirSync(envDir, { recursive: true });
+      fs.writeFileSync(path.join(envDir, 'staging.yaml'), 'clusterName: stg-cluster');
+
+      const cache = new Map();
+      const env = readEnvironmentConfig(tmpDir, 'org/repo', 'main', 'staging', cache);
+      expect(env.autoDeploy).toBe(false);
     });
   });
 });
