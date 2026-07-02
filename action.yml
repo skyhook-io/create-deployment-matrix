@@ -30,5 +30,5 @@ outputs:
     description: 'JSON string of the deployment matrix for service deployments'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
