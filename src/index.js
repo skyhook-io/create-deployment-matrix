@@ -113,18 +113,7 @@ async function processKoalaConfig(repoPath, branch, tag, githubToken, overlay) {
   core.info('🔍 Reading .koala-monorepo.json from repo root to identify services');
   core.info('📋 Extracting deployment configuration from .koala.toml files for different environments');
 
-  // Build the command
-  let cmd = `npx --yes workflow-utils get-services-env-config -dir . -outputFormat github-matrix -branch ${branch} -actionTag ${tag} -token ${githubToken}`;
-
-  if (overlay) {
-    core.info(`🎯 Filtering for environment: ${overlay}`);
-    cmd += ` -envFilter ${overlay}`;
-  } else {
-    core.info('🌍 Including all environments');
-  }
-
-  core.info(`📦 Executing: ${cmd}`);
-
+  const helperOptions = {branch, actionTag: tag, envFilter: overlay || undefined};
   // Execute the command
   let stdout = '';
   let stderr = '';
@@ -132,8 +121,9 @@ async function processKoalaConfig(repoPath, branch, tag, githubToken, overlay) {
   const options = {
     cwd: repoPath,
     env: {
-      ...process.env,
-      GITHUB_TOKEN: githubToken
+      LOCKED_WORKFLOW_TOKEN: githubToken,
+      GITHUB_TOKEN: githubToken,
+      ...(process.env.GITHUB_ACTION_TOKEN ? {GITHUB_ACTION_TOKEN: process.env.GITHUB_ACTION_TOKEN} : {})
     },
     listeners: {
       stdout: (data) => {
@@ -145,7 +135,8 @@ async function processKoalaConfig(repoPath, branch, tag, githubToken, overlay) {
     }
   };
 
-  await exec.exec('bash', ['-c', cmd], options);
+  options.silent = true;
+  await exec.exec(process.execPath, [require('path').join(__dirname, 'workflow-utils', 'index.js'), JSON.stringify(helperOptions)], options);
 
   if (!stdout.trim()) {
     throw new Error('Failed to generate matrix from Koala config - empty result');

@@ -1,0 +1,16 @@
+{
+  "dependencies": {},
+  "npm": {
+    "bundle_sha256": "6c0dc467672fff32e81d3ba8f9ff9c8fe9ec91e73591691f6a4d889484d07197",
+    "helper_sha256": "d7ebc1a01bc727d1e9610f21b7f56357e80e7258dbf83275cfafdd8d4aaa56f9",
+    "lock_sha256": "f1950ec640ccc721c67dae36a11b3114a70fc9440270021272937c4647248ec6"
+  },
+  "runner_tools": "Existing runner binaries and consumer build inputs are not snapshotted.",
+  "snapshot": "355975bb6ccbe1387c46",
+  "source": {
+    "ref": "v1",
+    "repository": "skyhook-io/create-deployment-matrix",
+    "sha": "56c6881ebcb12792e8cc940e015e1e7099ccf6ec"
+  },
+  "tools": {}
+}
