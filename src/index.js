@@ -5,14 +5,17 @@ const { DeploymentMatrix } = require('./DeploymentMatrix');
 const { detectConfigFormats } = require('./config/config-detector');
 const { parseSkyhookConfig } = require('./config/skyhook-parser');
 const { buildMatrixFromSkyhook, mergeMatrices } = require('./matrix/matrix-builder');
+const { resolveServiceEnvironments } = require('./deployment/repo-fetcher');
 
 async function run() {
   try {
     const overlay = core.getInput('overlay');
-    const branch = core.getInput('branch') || 'main';
+    const branch = core.getInput('branch') || '';
     const tag = core.getInput('tag');
-    const githubToken = core.getInput('github-token');
     const repoPath = core.getInput('repo-path') || '.';
+
+    // Collect all available tokens (deduplicated, ordered by priority)
+    const githubTokens = resolveTokens(core.getInput('github-token'), process.env.GITHUB_TOKEN);
 
     // Validate inputs
     if (!fs.existsSync(repoPath)) {
@@ -23,9 +26,12 @@ async function run() {
       throw new Error('tag input is required');
     }
 
-    if (!githubToken) {
-      throw new Error('github-token input is required');
+    if (githubTokens.length === 0) {
+      throw new Error('github-token input is required, or GITHUB_TOKEN environment variable must be set');
     }
+
+    // Primary token used for most operations
+    const githubToken = githubTokens[0];
 
     // Detect which config format(s) are present
     const configFormats = detectConfigFormats(repoPath);
@@ -49,7 +55,7 @@ async function run() {
     const serviceCounters = koalaMatrix ? getServiceCounters(koalaMatrix) : new Map();
     if (configFormats.hasSkyhook) {
       core.info('📋 Processing Skyhook configuration (.skyhook/skyhook.yaml)');
-      skyhookMatrix = await processSkyhookConfig(configFormats.skyhookPath, tag, overlay, repoPath, serviceCounters);
+      skyhookMatrix = await processSkyhookConfig(configFormats.skyhookPath, tag, overlay, repoPath, serviceCounters, branch, githubTokens);
     }
 
     // Determine final matrix
@@ -114,7 +120,10 @@ async function processKoalaConfig(repoPath, branch, tag, githubToken, overlay) {
   core.info('📋 Extracting deployment configuration from .koala.toml files for different environments');
 
   // Build the command
-  let cmd = `npx --yes workflow-utils get-services-env-config -dir . -outputFormat github-matrix -branch ${branch} -actionTag ${tag} -token ${githubToken}`;
+  let cmd = `npx --yes workflow-utils get-services-env-config -dir . -outputFormat github-matrix -actionTag ${tag} -token ${githubToken}`;
+  if (branch) {
+    cmd += ` -branch ${branch}`;
+  }
 
   if (overlay) {
     core.info(`🎯 Filtering for environment: ${overlay}`);
@@ -173,8 +182,10 @@ async function processKoalaConfig(repoPath, branch, tag, githubToken, overlay) {
  * @param {string} overlay - Environment filter
  * @param {string} repoPath - Path to the git repository
  * @param {Map<string, number>} serviceCounters - Per-service counters from Koala
+ * @param {string} branch - Branch for deployment repo cloning
+ * @param {string[]} githubTokens - GitHub tokens to try for deployment repo access (in priority order)
  */
-async function processSkyhookConfig(skyhookPath, tag, overlay, repoPath, serviceCounters) {
+async function processSkyhookConfig(skyhookPath, tag, overlay, repoPath, serviceCounters, branch, githubTokens) {
   const config = parseSkyhookConfig(skyhookPath);
 
   core.info(`Found ${config.services.length} services and ${config.environments.length} environments in Skyhook config`);
@@ -195,11 +206,27 @@ async function processSkyhookConfig(skyhookPath, tag, overlay, repoPath, service
     }
   }
 
+  // Resolve per-service environments from deployment repos
+  const perServiceEnvs = new Map();
+  const cloneCache = new Map();
+  const envConfigCache = new Map();
+
+  for (const service of config.services) {
+    if (service.deploymentRepo) {
+      core.info(`🔍 Resolving environments for ${service.name} from deployment repo ${service.deploymentRepo}`);
+      const envs = await resolveServiceEnvironments(
+        service, branch, githubTokens, cloneCache, envConfigCache
+      );
+      perServiceEnvs.set(service.name, envs);
+    }
+  }
+
   const matrix = buildMatrixFromSkyhook(config.services, config.environments, {
     tag,
     serviceRepo,
     envFilter: overlay,
-    serviceCounters: mergedCounters
+    serviceCounters: mergedCounters,
+    perServiceEnvs
   });
 
   return matrix;
@@ -256,6 +283,23 @@ async function getExistingTagCounters(services, tag, repoPath) {
 
   core.info(`Existing tag counters from git: ${JSON.stringify(Object.fromEntries(counters))}`);
   return counters;
+}
+
+/**
+ * Collect all distinct, non-empty tokens in priority order.
+ * @param {...string} sources - Token values (may be empty/undefined)
+ * @returns {string[]} - Deduplicated non-empty tokens
+ */
+function resolveTokens(...sources) {
+  const seen = new Set();
+  const tokens = [];
+  for (const token of sources) {
+    if (token && !seen.has(token)) {
+      seen.add(token);
+      tokens.push(token);
+    }
+  }
+  return tokens;
 }
 
 /**
